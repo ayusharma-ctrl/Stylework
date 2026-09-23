@@ -27,6 +27,9 @@ export async function bootstrap() {
   for (const signal of ['SIGTERM', 'SIGINT'] as const)
     process.prependOnceListener(signal, () => {
       app.get(RuntimeState).draining = true;
+      server.closeIdleConnections?.();
+      // The orchestrator can safely redeliver durable work after this deadline.
+      setTimeout(() => process.exit(1), 30000).unref();
     });
   app.enableShutdownHooks();
   await app.listen(config.PORT, '0.0.0.0');

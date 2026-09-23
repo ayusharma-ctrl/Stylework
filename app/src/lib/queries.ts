@@ -10,8 +10,9 @@ export const leadFields =
 const pageFields = 'pageInfo { startCursor endCursor hasNextPage hasPreviousPage }';
 type Cursor = { after?: string; before?: string };
 export function leadsOptions(filters: Record<string, unknown> = {}) {
+  const normalized = { search: '', sort: 'CREATED_AT', direction: 'DESC', ...filters };
   return infiniteQueryOptions({
-    queryKey: ['leads', filters],
+    queryKey: ['leads', normalized],
     initialPageParam: {} as Cursor,
     maxPages: 20,
     staleTime: Infinity,
@@ -19,7 +20,7 @@ export function leadsOptions(filters: Record<string, unknown> = {}) {
       (
         await graphql<{ leads: Connection<Lead> }>(
           `query Leads($input:LeadQueryInput){leads(input:$input){nodes{${leadFields}} ${pageFields}}}`,
-          { input: { ...filters, ...pageParam, ...(pageParam.before ? { last: 50 } : { first: 50 }) } },
+          { input: { ...normalized, ...pageParam, ...(pageParam.before ? { last: 50 } : { first: 50 }) } },
           signal,
         )
       ).leads,

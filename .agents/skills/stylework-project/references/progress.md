@@ -2,10 +2,11 @@
 ## Completed
 - Inspected empty workspace and confirmed Node 24/npm 11/Git availability.
 - Recorded agreed architecture and 18-commit sequence.
+- Implemented the API, worker, database, React workspace, tests and deployment configuration across all 18 local milestones.
 ## Current
-Milestone 18: document-deployment. Small-data scope correction is complete.
+Local implementation and verification complete, including the small-data scope correction.
 ## Remaining
-18 document-deployment: final Docker smoke/browser checks and documentation.
+Hosted publication, public URLs and remote CI execution are not completed. Deployment-specific throughput/soak and exhaustive process-kill tests remain unverified; do not run large-data tests without new explicit authorization.
 ## Verification
 - Docker restored; both images and the complete stack verified healthy.
 - No application existed before this implementation.
@@ -60,3 +61,6 @@ User explicitly stopped million-row generation and large load testing. Final sam
 
 ## limit-demo-seeds
 Demo defaults are 12 users, 150 leads and 75 additional status activities, with 150 creation audits. Seed input is capped at 200 leads. A real database regression verifies relationships, counts, the cap and additive reruns. Backend build, 23 unit checks and all 22 PostgreSQL/Redis integration scenarios pass. GraphQL now shares one asynchronous quota decision across root fields and correctly charges the read bucket. In-flight admission is bounded and documented in environment settings. No further large-data tests ran.
+
+## document-deployment
+README includes architecture, setup, API/key examples, deployment, recovery, trade-offs, scaling and future work. AGENT records actual AI assistance and human decisions without fabricated authorship/model claims. Render API/worker/Key Value and Vercel SPA configuration parse locally. Final review added a hard API shutdown deadline, complete default-status audit snapshots and matching prefetch/list cache keys (with a frontend regression). Both production builds pass; full rebuilt Compose stack is healthy. Final totals: 23 backend unit tests, 22 integration scenarios, 6 frontend tests and one Chromium journey passed. Container smoke passed sign-in, keyed durable intake, worker processing, lead read, status change, audit and SSE update. Desktop/light/dark and mobile screenshots inspected; no browser errors or overflow. Hosted services are not published and no public URL or certified throughput is claimed.

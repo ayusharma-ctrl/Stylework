@@ -49,7 +49,11 @@ export class StatusesService {
             ? 'Status created: ' + status.name
             : 'Status configuration updated: ' + status.name,
       before,
-      after: { ...status.toJSON(), isDefault: workspace.defaultStatusId === status.id },
+      after: {
+        ...status.toJSON(),
+        isDefault: workspace.defaultStatusId === status.id,
+        defaultStatusId: workspace.defaultStatusId,
+      },
       requestId,
     });
     await this.outbox.notify(transaction, {
@@ -105,7 +109,11 @@ export class StatusesService {
         status = await this.repository.lock(id, transaction);
       this.version(status, input.expectedVersion);
       if (status.archivedAt) throw new ConflictException('Archived statuses cannot be changed');
-      const before = { ...status.toJSON(), isDefault: workspace.defaultStatusId === status.id };
+      const before = {
+        ...status.toJSON(),
+        isDefault: workspace.defaultStatusId === status.id,
+        defaultStatusId: workspace.defaultStatusId,
+      };
       const { expectedVersion, isDefault, ...changes } = input;
       const changed = Object.entries(changes).some(([key, value]) => status.get(key) !== value);
       const newDefault = isDefault && workspace.defaultStatusId !== id;
@@ -130,6 +138,11 @@ export class StatusesService {
         status = await this.repository.lock(id, transaction);
       this.version(status, input.expectedVersion);
       if (status.archivedAt) return status.toJSON();
+      const before = {
+        ...status.toJSON(),
+        isDefault: workspace.defaultStatusId === id,
+        defaultStatusId: workspace.defaultStatusId,
+      };
       if (workspace.defaultStatusId === id) {
         if (!input.replacementStatusId || input.replacementStatusId === id)
           throw new ConflictException({
@@ -140,7 +153,6 @@ export class StatusesService {
         if (replacement.archivedAt) throw new ConflictException('Replacement status is archived');
         await workspace.update({ defaultStatusId: replacement.id }, { transaction });
       }
-      const before = status.toJSON();
       await status.update({ archivedAt: new Date(), version: status.version + 1 }, { transaction });
       await this.changed(transaction, workspace, status, 'STATUS_ARCHIVED', before, principal, requestId);
       return status.toJSON();

@@ -60,11 +60,9 @@ export class ErrorFilter implements ExceptionFilter {
     const res = host.switchToHttp().getResponse();
     if (res.headersSent) return res.end();
     if (status === 503) res.setHeader('Retry-After', '2');
-    res
-      .status(status)
-      .json({
-        error: { code, message, ...(details ? { details } : {}) },
-        meta: { requestId: req?.requestId },
-      });
+    res.status(status).json({
+      error: { code, message, ...(details ? { details } : {}) },
+      meta: { requestId: req?.requestId },
+    });
   }
 }
