@@ -9,8 +9,6 @@ const schema = z.object({
   REDIS_URL: z.string().default('redis://localhost:6388'),
   ACCESS_TOKEN_SECRET: z.string().min(32).default('local-access-secret-change-before-deploy-123'),
   REFRESH_TOKEN_SECRET: z.string().min(32).default('local-refresh-secret-change-before-deploy-123'),
-  WEBHOOK_SECRET: z.string().min(32).default('local-webhook-secret-change-before-deploy-123'),
-  WEBHOOK_KEY_ID: z.string().default('local-meta'),
   METRICS_TOKEN: z.string().min(16).default('local-metrics-secret-123'),
   CLIENT_ORIGINS: z.string().default('http://localhost:5173,http://localhost:8080'),
   TRUST_PROXY: z.string().default(''),
@@ -31,7 +29,7 @@ const schema = z.object({
 export function parseConfig(env: NodeJS.ProcessEnv) {
   const value = schema.parse(env);
   if (value.NODE_ENV === 'production') {
-    for (const key of ['ACCESS_TOKEN_SECRET','REFRESH_TOKEN_SECRET','WEBHOOK_SECRET','METRICS_TOKEN'] as const) {
+    for (const key of ['ACCESS_TOKEN_SECRET','REFRESH_TOKEN_SECRET','METRICS_TOKEN'] as const) {
       if (!env[key] || value[key].startsWith('local-')) throw new Error(key + ' must be configured securely');
     }
     if (!env.DATABASE_URL || !env.REDIS_URL || !env.CLIENT_ORIGINS) throw new Error('Production connection URLs and origins are required');

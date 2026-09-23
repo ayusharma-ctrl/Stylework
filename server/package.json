@@ -18,7 +18,8 @@
     "db:seed": "ts-node src/database/cli.ts seed",
     "smoke": "node scripts/smoke.mjs",
     "webhook:send": "node scripts/send-webhook.mjs",
-    "webhook:replay": "ts-node src/scripts/replay.ts"
+    "webhook:replay": "ts-node src/scripts/replay.ts",
+    "webhook:key": "ts-node src/scripts/webhook-key.ts"
   },
   "dependencies": {
     "@apollo/server": "^5.5.1",

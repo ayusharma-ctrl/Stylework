@@ -41,11 +41,13 @@ FROM inserted i JOIN statuses s ON s.id=i.status_id WHERE s.name<>'Open'
 export async function rebuildCounters(db: Sequelize) {
   await db.transaction(async transaction => {
     // Maintenance-only command: blocks lead writes while taking an exact replacement snapshot.
-    await db.query('LOCK TABLE leads IN SHARE MODE', { transaction });
+    await db.query('LOCK TABLE leads,activities IN SHARE MODE', { transaction });
     await db.query('DELETE FROM dashboard_counters', { transaction });
     await db.query(`
 INSERT INTO dashboard_counters(key,shard,value)
  SELECT 'total',get_byte(decode(replace(id::text,'-',''),'hex'),15)%64,count(*) FROM leads GROUP BY 2
+ UNION ALL
+ SELECT 'activity',get_byte(decode(replace(entity_id::text,'-',''),'hex'),15)%64,count(*) FROM activities GROUP BY 2
  UNION ALL
  SELECT 'status:'||status_id,get_byte(decode(replace(id::text,'-',''),'hex'),15)%64,count(*) FROM leads GROUP BY 1,2
  UNION ALL

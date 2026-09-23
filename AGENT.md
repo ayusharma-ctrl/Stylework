@@ -6,6 +6,7 @@ OpenAI Codex assisted this implementation. The session identifies the assistant 
 - The user requested a production-oriented Stylework lead intake service with NestJS, Sequelize/PostgreSQL, React, Docker, rate limiting, audit, workers, and tests.
 - Architecture discussion resolved shared data, signed assignment payloads without third-party integration, email-only login, readable tokens, REST plus GraphQL, status-only editing, and local delivery.
 - The user explicitly approved the recorded implementation plan and requested its implementation.
+- During implementation, the user changed webhook authentication to database-backed secrets/auth keys supplied in request headers. The implementation uses X-Webhook-Key and hashed PostgreSQL credential records.
 
 ## Human decisions
 The user specified the technology stack, independent app/server structure, shared workspace, authentication/token storage behavior, deployment targets, scope, and requested commit/testing cadence.

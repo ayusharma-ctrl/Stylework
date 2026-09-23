@@ -11,7 +11,7 @@ export class WebhooksController {
  constructor(private readonly service:WebhooksService) {}
  @Public() @UseGuards(WebhookGuard) @Post('webhook/meta-lead')
  async accept(@Req() req:ApiRequest,@Res({passthrough:true}) res:Response,@Body(new ZodPipe(webhookSchema)) body:WebhookDto) {
-  const result=await this.service.accept(body,req.requestId);
+  const result=await this.service.accept(body,req.requestId,req.webhookCredentialId!);
   res.status(result.duplicate?200:202);
   return result;
  }

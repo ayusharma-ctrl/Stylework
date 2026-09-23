@@ -12,7 +12,7 @@ export async function bootstrap() {
   app.set('trust proxy', config.TRUST_PROXY ? config.TRUST_PROXY.split(',').map(s=>s.trim()) : false);
   app.use(app.get(RequestMiddleware).use);
   app.use(helmet());
-  app.enableCors({ origin: config.CLIENT_ORIGINS.split(',').map(s=>new URL(s.trim()).origin), methods: ['GET','POST','PATCH','DELETE','OPTIONS'], allowedHeaders:['Content-Type','Authorization','X-Refresh-Token','X-Webhook-Key-Id','X-Webhook-Timestamp','X-Webhook-Signature'], exposedHeaders:['X-Request-ID','X-Access-Token','X-Access-Token-Expires-At','Retry-After'], credentials:false });
+  app.enableCors({ origin: config.CLIENT_ORIGINS.split(',').map(s=>new URL(s.trim()).origin), methods: ['GET','POST','PATCH','DELETE','OPTIONS'], allowedHeaders:['Content-Type','Authorization','X-Refresh-Token','X-Webhook-Key'], exposedHeaders:['X-Request-ID','X-Access-Token','X-Access-Token-Expires-At','Retry-After'], credentials:false });
   app.useBodyParser('json', { limit: '64kb', inflate: false });
   const server=app.getHttpServer();
   server.requestTimeout=15000;

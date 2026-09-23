@@ -10,7 +10,7 @@ REST: POST /signin; GET/PATCH /me; POST /signout; POST /webhook/meta-lead; GET /
 POST /graphql supplies cursor connections for leads and activities, and lead detail. REST and GraphQL share services.
 
 ## Durable intake
-HMAC covers delivery timestamp + exact body. Receipt and processing outbox commit before 202. Unique source/event ID plus canonical hash detects duplicates and conflicts. Source/external ID uniquely identifies a lead. Full snapshots carry an increasing source version. Worker transaction writes lead, activity, 64-shard counters, outcome, and notification outbox. Pending receipts remain reconcilable after Redis loss. Redis locks never establish correctness.
+Webhook callers supply X-Webhook-Key. PostgreSQL stores the key hash, label, expiry, and revocation state; there is no server environment webhook secret. A CLI creates, imports, lists, and revokes keys. This replaces the original HMAC plan per the user's subsequent instruction. Receipt and processing outbox commit before 202. Unique source/event ID plus canonical hash detects duplicates and conflicts. Source/external ID uniquely identifies a lead. Full snapshots carry an increasing source version. Worker transaction writes lead, activity, 64-shard counters, outcome, and notification outbox. Pending receipts remain reconcilable after Redis loss. Redis locks never establish correctness.
 
 ## Identity and security
 Explicitly requested email-only login, access and refresh JWTs in headers, readable token table. Access 15 minutes; refresh 7 days; refresh is stable until session expiry/revocation. Row locking coalesces renewal. This is an impersonation-friendly assignment flow, not verified identity. Tokens never enter localStorage or logs.

@@ -1,21 +1,21 @@
-import { ConflictException, Injectable, NotFoundException, ServiceUnavailableException } from '@nestjs/common';
+import { ConflictException, Injectable, NotFoundException, ServiceUnavailableException, UnauthorizedException } from '@nestjs/common';
 import { QueryTypes } from 'sequelize';
 import { Response } from 'express';
 import { config } from '../../config/config';
 import { DatabaseService } from '../../database/database.service';
-import { Outbox, Receipt } from '../../database/models';
+import { Outbox, Receipt, WebhookCredential } from '../../database/models';
 import { canonicalJson, hash } from '../../common/crypto';
 import { ApiRequest } from '../../common/http.types';
 import { RateLimiter } from '../../common/security/rate-limiter.service';
 import { WebhooksRepository } from './webhooks.repository';
 import { WebhookDto } from './webhook.dto';
-import { verifyDelivery } from './signature';
+import { WebhookCredentialsService } from './webhook-credentials.service';
 @Injectable()
 export class WebhooksService {
  private backlog=0; private checked=0; private checking?:Promise<void>;
- constructor(private readonly db:DatabaseService,private readonly repository:WebhooksRepository,private readonly limiter:RateLimiter) {}
+ constructor(private readonly db:DatabaseService,private readonly repository:WebhooksRepository,private readonly limiter:RateLimiter,private readonly credentials:WebhookCredentialsService) {}
  async verify(req:ApiRequest,res:Response) {
-  verifyDelivery(req.rawBody,req.headers,config.WEBHOOK_KEY_ID,config.WEBHOOK_SECRET);
+  req.webhookCredentialId=(await this.credentials.verify(req.headers['x-webhook-key'])).id;
   await this.limiter.consume('webhook-integration','meta',config.WEBHOOK_BURST,1000,res,config.WEBHOOK_RATE);
  }
  private async overloaded() {
@@ -25,9 +25,11 @@ export class WebhooksService {
   }
   return this.backlog>=config.MAX_PENDING_EVENTS;
  }
- async accept(payload:WebhookDto,requestId:string) {
+ async accept(payload:WebhookDto,requestId:string,credentialId:string) {
   const overloaded=await this.overloaded(),payloadHash=hash(canonicalJson(payload));
   return this.db.sequelize.transaction(async transaction=>{
+   const credential=await WebhookCredential.findByPk(credentialId,{transaction,lock:transaction.LOCK.SHARE});
+   if(!credential||credential.revokedAt||(credential.expiresAt&&credential.expiresAt.getTime()<=Date.now()))throw new UnauthorizedException('Webhook key is no longer active');
    await this.db.sequelize.query("SELECT pg_advisory_xact_lock(hashtextextended(:key,0))",{replacements:{key:'receipt:meta:'+payload.eventId},transaction});
    const existing=await this.repository.find(payload.eventId,transaction);
    if(existing) {

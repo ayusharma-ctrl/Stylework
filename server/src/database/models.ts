@@ -39,9 +39,14 @@ export class Outbox extends Model {
   declare id: string; declare kind: 'process' | 'notify'; declare receiptId: string | null;
   declare payload: Record<string, unknown>; declare publishedAt: Date | null; declare createdAt: Date;
 }
+export class WebhookCredential extends Model {
+ declare id:string; declare name:string; declare keyHash:string; declare keyPrefix:string;
+ declare revokedAt:Date|null; declare expiresAt:Date|null; declare createdAt:Date;
+}
 const id = { type: D.UUID, primaryKey: true, defaultValue: D.UUIDV4 };
 const required = (type: any) => ({ type, allowNull: false });
 export function registerModels(sequelize: Sequelize) {
+  WebhookCredential.init({id,name:required(D.STRING(80)),keyHash:required(D.STRING(64)),keyPrefix:required(D.STRING(12)),revokedAt:D.DATE,expiresAt:D.DATE},{sequelize,tableName:'webhook_credentials'});
   User.init({ id, email: required(D.STRING(254)), meta: { ...required(D.JSONB), defaultValue: {} } }, { sequelize, tableName: 'users' });
   Session.init({ id, userId: required(D.UUID), accessToken: required(D.TEXT), refreshToken: required(D.TEXT), accessExpiresAt: required(D.DATE), refreshExpiresAt: required(D.DATE), revokedAt: D.DATE }, { sequelize, tableName: 'sessions' });
   Status.init({ id, name: required(D.STRING(60)), color: required(D.STRING(7)), position: required(D.INTEGER), archivedAt: D.DATE, version: { ...required(D.INTEGER), defaultValue: 1 } }, { sequelize, tableName: 'statuses' });
