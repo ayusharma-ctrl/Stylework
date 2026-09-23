@@ -9,3 +9,6 @@ Milestone 1: project-plan.
 ## Verification
 - Docker daemon initially unavailable; restore local engine before integration tests.
 - No application existed before this implementation.
+
+## server-setup
+Backend dependencies installed; TypeScript build and 3 configuration tests passed.
