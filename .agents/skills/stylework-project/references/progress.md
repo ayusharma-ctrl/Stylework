@@ -3,9 +3,9 @@
 - Inspected empty workspace and confirmed Node 24/npm 11/Git availability.
 - Recorded agreed architecture and 18-commit sequence.
 ## Current
-Milestone 13: build-app-shell.
+Milestone 14: build-lead-views.
 ## Remaining
-13 build-app-shell; 14 build-lead-views; 15 build-activity-settings; 16 add-reliability-tests; 17 add-load-tests; 18 document-deployment.
+14 build-lead-views; 15 build-activity-settings; 16 add-reliability-tests; 17 add-load-tests; 18 document-deployment.
 ## Verification
 - Docker daemon initially unavailable; restore local engine before integration tests.
 - No application existed before this implementation.
@@ -42,3 +42,6 @@ Status creation/editing, transactional reorder, default replacement and archival
 
 ## setup-dashboard-stream
 Dashboard snapshots aggregate sharded counters and a dynamic status catalog in a consistent read transaction. Shared per-process computation, coalesced Redis notifications, reconciliation, heartbeats, session checks, distributed connection limits and slow-consumer closure implemented. Build and real SSE smoke passed for immediate snapshot and committed status count update. Zero comparison baseline is explicitly unavailable.
+
+## build-app-shell
+React shell, responsive navigation, semantic light/dark tokens, shadcn-style Radix primitives, email sign-in, sessionStorage credentials, persisted Zustand preferences and cached GraphQL prefetch implemented. Dashboard renders generic SSE metrics and status breakdowns. Component sign-in smoke passed. Independent production build passed after resolving strict TypeScript generic inference. Browser plugin reports its in-app backend unavailable; checking available automation for later visual verification.
