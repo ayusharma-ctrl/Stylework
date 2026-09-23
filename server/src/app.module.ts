@@ -11,8 +11,9 @@ import { ResponseInterceptor } from './common/response.interceptor';
 import { ErrorFilter } from './common/error.filter';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
 import { QueriesModule } from './modules/queries/queries.module';
+import { StatusesModule } from './modules/statuses/statuses.module';
 @Module({
- imports: [DatabaseModule, SecurityModule, AuthModule, UsersModule, HealthModule, WebhooksModule, QueriesModule],
+ imports: [DatabaseModule, SecurityModule, AuthModule, UsersModule, HealthModule, WebhooksModule, QueriesModule, StatusesModule],
  providers: [{ provide: APP_GUARD, useClass: AuthGuard }, { provide: APP_GUARD, useClass: RateGuard }, { provide: APP_INTERCEPTOR, useClass: ResponseInterceptor }, { provide: APP_FILTER, useClass: ErrorFilter }]
 })
 export class AppModule {}

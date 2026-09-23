@@ -3,9 +3,9 @@
 - Inspected empty workspace and confirmed Node 24/npm 11/Git availability.
 - Recorded agreed architecture and 18-commit sequence.
 ## Current
-Milestone 11: setup-statuses.
+Milestone 12: setup-dashboard-stream.
 ## Remaining
-11 setup-statuses; 12 setup-dashboard-stream; 13 build-app-shell; 14 build-lead-views; 15 build-activity-settings; 16 add-reliability-tests; 17 add-load-tests; 18 document-deployment.
+12 setup-dashboard-stream; 13 build-app-shell; 14 build-lead-views; 15 build-activity-settings; 16 add-reliability-tests; 17 add-load-tests; 18 document-deployment.
 ## Verification
 - Docker daemon initially unavailable; restore local engine before integration tests.
 - No application existed before this implementation.
@@ -36,3 +36,6 @@ User superseded HMAC with database-backed X-Webhook-Key credentials. Migration, 
 
 ## setup-leads-api
 REST and selectable GraphQL lead/detail/activity reads share application services. Signed, filter-bound keyset cursors preserve PostgreSQL timestamp precision in both directions. Build, unit checks and real query smoke passed for REST parity, forward/backward paging, search and abusive query rejection. GraphQL limits return HTTP 400 with trace metadata.
+
+## setup-statuses
+Status creation/editing, transactional reorder, default replacement and archival implemented. Lead status changes use optimistic versions and commit audit/counters/outbox together. Real HTTP smoke passed: simultaneous edits yield one success/one 409; default archival requires replacement; archived lead relationship preserved; reorder succeeds. Active catalog bounded at 100 statuses.
