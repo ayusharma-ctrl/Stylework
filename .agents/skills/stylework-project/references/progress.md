@@ -18,3 +18,6 @@ Independent Vite production build and component smoke test passed.
 
 ## setup-docker
 Compose configuration valid; dedicated PostgreSQL and Redis containers started. Full images will be tested once worker and migration entrypoints exist.
+
+## setup-database
+Sequelize build, initial migration, and 12,000-lead relational seeder passed against local PostgreSQL. Immutable audit trigger and indexed schema installed.
