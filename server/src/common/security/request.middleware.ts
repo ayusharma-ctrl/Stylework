@@ -13,9 +13,9 @@ export class RequestMiddleware {
   use = async (req:ApiRequest,res:Response,next:NextFunction) => {
     req.requestId=randomUUID();
     res.setHeader('X-Request-ID',req.requestId);
-    const started=performance.now();
+    const started=performance.now(),path=req.path;
     res.once('finish',()=>{
-      const route=typeof req.route?.path==='string'?req.route.path:req.path==='/graphql'?'/graphql':'unmatched';
+      const route=path==='/graphql'?'/graphql':typeof req.route?.path==='string'?req.route.path:'unmatched';
       this.telemetry.requests.inc({method:req.method,route,status:String(res.statusCode)});
       this.telemetry.duration.observe({method:req.method,route},(performance.now()-started)/1000);
       if(!req.path.startsWith('/health')) this.telemetry.log.info({requestId:req.requestId,method:req.method,route,status:res.statusCode,durationMs:Math.round(performance.now()-started)},'request completed');
@@ -26,7 +26,8 @@ export class RequestMiddleware {
       const origin=req.headers.origin;
       if(origin && !this.origins.has(origin)) throw new ForbiddenException('Origin is not allowed');
       if(req.method==='OPTIONS') return next();
-      if(['POST','PATCH','PUT'].includes(req.method) && !req.is('application/json')) throw new UnsupportedMediaTypeException('Content-Type must be application/json');
+      if(req.path==='/graphql'&&req.method!=='POST')throw new HttpException('GraphQL requires POST',405);
+      if(['POST','PATCH','PUT','DELETE'].includes(req.method) && !req.is('application/json')) throw new UnsupportedMediaTypeException('Content-Type must be application/json');
       const ip=req.ip||req.socket.remoteAddress||'unknown';
       if(req.path==='/signin') await this.limiter.consume('signin-ip',ip,config.SIGNIN_IP_LIMIT,60000,res);
       else if(req.path==='/webhook/meta-lead') await this.limiter.consume('webhook-ip',ip,config.WEBHOOK_IP_RATE,1000,res);
