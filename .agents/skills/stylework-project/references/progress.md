@@ -27,3 +27,6 @@ Nest 11 compatibility line selected after an ESM/Jest failure on Nest 12. Build,
 
 ## harden-api
 Build, 11 unit checks, and authenticated HTTP smoke passed with Redis-backed limiting, tracing, origin checks, response envelopes, and health checks active.
+
+## setup-webhook
+Build and 15 unit checks passed. Live smoke verified invalid HMAC rejection, ten concurrent identical deliveries producing one acceptance, and changed-payload conflict rejection.

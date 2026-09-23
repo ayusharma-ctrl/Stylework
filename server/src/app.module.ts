@@ -9,5 +9,9 @@ import { SecurityModule } from './common/security/security.module';
 import { RateGuard } from './common/security/rate.guard';
 import { ResponseInterceptor } from './common/response.interceptor';
 import { ErrorFilter } from './common/error.filter';
-@Module({ imports: [DatabaseModule, SecurityModule, AuthModule, UsersModule, HealthModule], providers: [{ provide: APP_GUARD, useClass: AuthGuard }, { provide: APP_GUARD, useClass: RateGuard }, { provide: APP_INTERCEPTOR, useClass: ResponseInterceptor }, { provide: APP_FILTER, useClass: ErrorFilter }] })
+import { WebhooksModule } from './modules/webhooks/webhooks.module';
+@Module({
+ imports: [DatabaseModule, SecurityModule, AuthModule, UsersModule, HealthModule, WebhooksModule],
+ providers: [{ provide: APP_GUARD, useClass: AuthGuard }, { provide: APP_GUARD, useClass: RateGuard }, { provide: APP_INTERCEPTOR, useClass: ResponseInterceptor }, { provide: APP_FILTER, useClass: ErrorFilter }]
+})
 export class AppModule {}
