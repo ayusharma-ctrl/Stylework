@@ -4,16 +4,28 @@ import { httpContext } from '../../modules/auth/auth.guard';
 import { RateLimiter } from './rate-limiter.service';
 @Injectable()
 export class RateGuard implements CanActivate {
-  constructor(private readonly limiter:RateLimiter) {}
-  async canActivate(context:ExecutionContext) {
-    const {req,res}=httpContext(context);
+  constructor(private readonly limiter: RateLimiter) {}
+  async canActivate(context: ExecutionContext) {
+    const { req, res } = httpContext(context);
     if ((req as any).userQuotaChecked) return true;
-    (req as any).userQuotaChecked=true;
-    if (req.path==='/signin' && typeof req.body?.email==='string') {
-      await this.limiter.consume('signin-email',req.body.email.trim().toLowerCase().slice(0,254),config.SIGNIN_EMAIL_LIMIT,60000,res);
+    (req as any).userQuotaChecked = true;
+    if (req.path === '/signin' && typeof req.body?.email === 'string') {
+      await this.limiter.consume(
+        'signin-email',
+        req.body.email.trim().toLowerCase().slice(0, 254),
+        config.SIGNIN_EMAIL_LIMIT,
+        60000,
+        res,
+      );
     } else if (req.principal) {
-      const read=req.method==='GET'||req.path==='/graphql';
-      await this.limiter.consume(read?'read-user':'write-user',req.principal.id,read?config.READ_USER_LIMIT:config.WRITE_USER_LIMIT,60000,res);
+      const read = req.method === 'GET' || req.path === '/graphql';
+      await this.limiter.consume(
+        read ? 'read-user' : 'write-user',
+        req.principal.id,
+        read ? config.READ_USER_LIMIT : config.WRITE_USER_LIMIT,
+        60000,
+        res,
+      );
     }
     return true;
   }

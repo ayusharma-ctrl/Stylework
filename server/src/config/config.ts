@@ -28,11 +28,14 @@ const schema = z.object({
 });
 export function parseConfig(env: NodeJS.ProcessEnv) {
   const value = schema.parse(env);
+  if (value.ACCESS_TOKEN_SECRET === value.REFRESH_TOKEN_SECRET)
+    throw new Error('Access and refresh signing secrets must differ');
   if (value.NODE_ENV === 'production') {
-    for (const key of ['ACCESS_TOKEN_SECRET','REFRESH_TOKEN_SECRET','METRICS_TOKEN'] as const) {
+    for (const key of ['ACCESS_TOKEN_SECRET', 'REFRESH_TOKEN_SECRET', 'METRICS_TOKEN'] as const) {
       if (!env[key] || value[key].startsWith('local-')) throw new Error(key + ' must be configured securely');
     }
-    if (!env.DATABASE_URL || !env.REDIS_URL || !env.CLIENT_ORIGINS) throw new Error('Production connection URLs and origins are required');
+    if (!env.DATABASE_URL || !env.REDIS_URL || !env.CLIENT_ORIGINS)
+      throw new Error('Production connection URLs and origins are required');
   }
   return Object.freeze(value);
 }

@@ -7,8 +7,15 @@ import { signinSchema, SigninDto } from './auth.dto';
 @Controller()
 export class AuthController {
   constructor(private readonly auth: AuthService) {}
-  @Public() @Post('signin') @HttpCode(200)
-  signin(@Body(new ZodPipe(signinSchema)) body: SigninDto) { return this.auth.signin(body.email); }
-  @Post('signout') @HttpCode(200)
-  signout(@Req() req:ApiRequest) { return this.auth.signout(req.principal!.sessionId); }
+  @Public()
+  @Post('signin')
+  @HttpCode(200)
+  signin(@Body(new ZodPipe(signinSchema)) body: SigninDto) {
+    return this.auth.signin(body.email);
+  }
+  @Post('signout')
+  @HttpCode(200)
+  signout(@Req() req: ApiRequest) {
+    return this.auth.signout(req.principal!.sessionId);
+  }
 }

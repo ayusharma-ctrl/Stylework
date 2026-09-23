@@ -8,13 +8,21 @@ import { WebhooksService } from './webhooks.service';
 import { WebhookGuard } from './webhook.guard';
 @Controller()
 export class WebhooksController {
- constructor(private readonly service:WebhooksService) {}
- @Public() @UseGuards(WebhookGuard) @Post('webhook/meta-lead')
- async accept(@Req() req:ApiRequest,@Res({passthrough:true}) res:Response,@Body(new ZodPipe(webhookSchema)) body:WebhookDto) {
-  const result=await this.service.accept(body,req.requestId,req.webhookCredentialId!);
-  res.status(result.duplicate?200:202);
-  return result;
- }
- @Get('webhook-events/:eventId')
- outcome(@Param('eventId',new ZodPipe(eventIdSchema)) eventId:string) {return this.service.outcome(eventId);}
+  constructor(private readonly service: WebhooksService) {}
+  @Public()
+  @UseGuards(WebhookGuard)
+  @Post('webhook/meta-lead')
+  async accept(
+    @Req() req: ApiRequest,
+    @Res({ passthrough: true }) res: Response,
+    @Body(new ZodPipe(webhookSchema)) body: WebhookDto,
+  ) {
+    const result = await this.service.accept(body, req.requestId, req.webhookCredentialId!);
+    res.status(result.duplicate ? 200 : 202);
+    return result;
+  }
+  @Get('webhook-events/:eventId')
+  outcome(@Param('eventId', new ZodPipe(eventIdSchema)) eventId: string) {
+    return this.service.outcome(eventId);
+  }
 }

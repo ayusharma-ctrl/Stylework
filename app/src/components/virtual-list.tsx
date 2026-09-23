@@ -62,7 +62,7 @@ export function VirtualList<T extends { id: string }>({
   return (
     <>
       <div className="virtual-toolbar">
-        <span>{rows.length.toLocaleString()} leads or events in this view</span>
+        <span>{rows.length.toLocaleString()} shown in this view</span>
         {hasPrevious && (
           <Button size="sm" variant="ghost" disabled={fetching} onClick={() => void load('previous')}>
             Load previous

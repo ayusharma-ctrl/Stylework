@@ -3,9 +3,9 @@
 - Inspected empty workspace and confirmed Node 24/npm 11/Git availability.
 - Recorded agreed architecture and 18-commit sequence.
 ## Current
-Milestone 16: add-reliability-tests.
+Milestone 17: add-load-tests.
 ## Remaining
-16 add-reliability-tests; 17 add-load-tests; 18 document-deployment.
+17 add-load-tests; 18 document-deployment.
 ## Verification
 - Docker daemon initially unavailable; restore local engine before integration tests.
 - No application existed before this implementation.
@@ -51,3 +51,6 @@ Lazy lead list/detail routes, URL search/status/date/sort filters, cursor paging
 
 ## build-activity-settings
 Global activity and status settings support reorder, rename, color, default selection and safe archival. Frontend formatted. Production build, component smoke and Chromium journey passed: sign-in, live dashboard, virtual paging, search, status update, activity dialog, status create/archive, persisted dark theme, mobile navigation and sign-out. Desktop light/dark and 390px mobile screenshots inspected. No browser errors or horizontal overflow. Approval review usage limit interrupted the milestone commit; resumed after user instruction.
+
+## add-reliability-tests
+23 backend unit checks, 20 real PostgreSQL/Redis integration scenarios, 5 frontend checks and the browser journey pass. Isolated databases are created/dropped by the integration runner; Redis DB 15 is reserved for tests. Verified rollback fault injection, duplicate/redelivered events, version ordering, concurrent registration/renewal/status edits, append-only audit, origin/body/query limits, shared limiter failure, SSE revocation and Redis-loss receipt reconciliation. Corrected retry accounting under concurrent redelivery. Dependency audit reports zero vulnerabilities after compatible fixes and a tested Sequelize UUID override. Both Docker images build; full Compose startup and end-to-end smoke are next. CI covers backend, frontend and Compose browser journey.

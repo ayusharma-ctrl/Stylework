@@ -2,6 +2,11 @@
   "name": "stylework-server",
   "version": "1.0.0",
   "private": true,
+  "overrides": {
+    "sequelize": {
+      "uuid": "11.1.1"
+    }
+  },
   "engines": {
     "node": ">=24 <25"
   },
@@ -13,7 +18,7 @@
     "dev": "nodemon --watch src --ext ts --exec ts-node src/main.ts",
     "dev:worker": "nodemon --watch src --ext ts --exec ts-node src/worker.ts",
     "test": "jest --runInBand",
-    "test:integration": "jest --config test/jest.integration.json --runInBand",
+    "test:integration": "node test/run-integration.cjs",
     "db:migrate": "ts-node src/database/cli.ts migrate",
     "db:seed": "ts-node src/database/cli.ts seed",
     "smoke": "node scripts/smoke.mjs",
@@ -55,6 +60,7 @@
     "@types/supertest": "^6.0.3",
     "jest": "^29.7.0",
     "nodemon": "^3.1.10",
+    "prettier": "^3.9.9",
     "supertest": "^7.1.4",
     "ts-jest": "^29.4.4",
     "ts-node": "^10.9.2",

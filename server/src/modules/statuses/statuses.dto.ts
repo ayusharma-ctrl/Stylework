@@ -1,11 +1,44 @@
-import {z} from 'zod';
-export const createStatusSchema=z.object({name:z.string().trim().min(1).max(60),color:z.string().regex(/^#[0-9a-fA-F]{6}$/),position:z.number().int().min(0).max(10000).optional()}).strict();
-export const updateStatusSchema=z.object({name:z.string().trim().min(1).max(60).optional(),color:z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),position:z.number().int().min(0).max(10000).optional(),isDefault:z.literal(true).optional(),expectedVersion:z.number().int().positive()}).strict().refine(v=>v.name!==undefined||v.color!==undefined||v.position!==undefined||v.isDefault!==undefined,'Provide a status change');
-export const archiveStatusSchema=z.object({expectedVersion:z.number().int().positive(),replacementStatusId:z.uuid().optional()}).strict();
-export const changeLeadStatusSchema=z.object({statusId:z.uuid(),expectedVersion:z.number().int().positive()}).strict();
-export type CreateStatus=z.infer<typeof createStatusSchema>;
-export type UpdateStatus=z.infer<typeof updateStatusSchema>;
-export type ArchiveStatus=z.infer<typeof archiveStatusSchema>;
-export type ChangeLeadStatus=z.infer<typeof changeLeadStatusSchema>;
-export const reorderStatusesSchema=z.object({items:z.array(z.object({id:z.uuid(),expectedVersion:z.number().int().positive()}).strict()).min(1).max(100)}).strict();
-export type ReorderStatuses=z.infer<typeof reorderStatusesSchema>;
+import { z } from 'zod';
+export const createStatusSchema = z
+  .object({
+    name: z.string().trim().min(1).max(60),
+    color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+    position: z.number().int().min(0).max(10000).optional(),
+  })
+  .strict();
+export const updateStatusSchema = z
+  .object({
+    name: z.string().trim().min(1).max(60).optional(),
+    color: z
+      .string()
+      .regex(/^#[0-9a-fA-F]{6}$/)
+      .optional(),
+    position: z.number().int().min(0).max(10000).optional(),
+    isDefault: z.literal(true).optional(),
+    expectedVersion: z.number().int().positive(),
+  })
+  .strict()
+  .refine(
+    (v) =>
+      v.name !== undefined || v.color !== undefined || v.position !== undefined || v.isDefault !== undefined,
+    'Provide a status change',
+  );
+export const archiveStatusSchema = z
+  .object({ expectedVersion: z.number().int().positive(), replacementStatusId: z.uuid().optional() })
+  .strict();
+export const changeLeadStatusSchema = z
+  .object({ statusId: z.uuid(), expectedVersion: z.number().int().positive() })
+  .strict();
+export type CreateStatus = z.infer<typeof createStatusSchema>;
+export type UpdateStatus = z.infer<typeof updateStatusSchema>;
+export type ArchiveStatus = z.infer<typeof archiveStatusSchema>;
+export type ChangeLeadStatus = z.infer<typeof changeLeadStatusSchema>;
+export const reorderStatusesSchema = z
+  .object({
+    items: z
+      .array(z.object({ id: z.uuid(), expectedVersion: z.number().int().positive() }).strict())
+      .min(1)
+      .max(100),
+  })
+  .strict();
+export type ReorderStatuses = z.infer<typeof reorderStatusesSchema>;

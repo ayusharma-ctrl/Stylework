@@ -1,7 +1,8 @@
 import { Sequelize } from 'sequelize';
 export async function up(db: Sequelize) {
-  await db.transaction(async transaction => {
-    await db.query(`
+  await db.transaction(async (transaction) => {
+    await db.query(
+      `
 CREATE EXTENSION IF NOT EXISTS pg_trgm;
 CREATE TABLE users (
  id uuid PRIMARY KEY DEFAULT gen_random_uuid(), email varchar(254) NOT NULL UNIQUE,
@@ -83,6 +84,8 @@ CREATE TABLE dashboard_counters (
  value bigint NOT NULL DEFAULT 0 CHECK(value>=0), updated_at timestamptz NOT NULL DEFAULT now(),
  PRIMARY KEY(key,shard)
 );
-`, { transaction });
+`,
+      { transaction },
+    );
   });
 }

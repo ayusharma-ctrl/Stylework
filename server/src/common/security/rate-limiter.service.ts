@@ -20,13 +20,35 @@ return delay
 @Injectable()
 export class RateLimiter {
   constructor(private readonly redis: RedisService) {}
-  async consume(scope: string,identity: string,capacity: number,windowMs: number,response?:Response,refill=capacity) {
+  async consume(
+    scope: string,
+    identity: string,
+    capacity: number,
+    windowMs: number,
+    response?: Response,
+    refill = capacity,
+  ) {
     let retry: number;
-    try { retry=Number(await this.redis.client.eval(bucket,1,'sw:rate:'+scope+':'+hash(identity),capacity,windowMs,refill)); }
-    catch { throw new ServiceUnavailableException({code:'RATE_LIMITER_UNAVAILABLE',message:'Service temporarily unavailable; retry shortly'}); }
-    if (retry>0) {
-      response?.setHeader('Retry-After',String(Math.max(1,Math.ceil(retry/1000))));
-      throw new HttpException({code:'RATE_LIMITED',message:'Too many requests; retry later'},429);
+    try {
+      retry = Number(
+        await this.redis.client.eval(
+          bucket,
+          1,
+          'sw:rate:' + scope + ':' + hash(identity),
+          capacity,
+          windowMs,
+          refill,
+        ),
+      );
+    } catch {
+      throw new ServiceUnavailableException({
+        code: 'RATE_LIMITER_UNAVAILABLE',
+        message: 'Service temporarily unavailable; retry shortly',
+      });
+    }
+    if (retry > 0) {
+      response?.setHeader('Retry-After', String(Math.max(1, Math.ceil(retry / 1000))));
+      throw new HttpException({ code: 'RATE_LIMITED', message: 'Too many requests; retry later' }, 429);
     }
   }
 }

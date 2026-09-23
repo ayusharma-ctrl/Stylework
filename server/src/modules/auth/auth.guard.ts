@@ -5,19 +5,27 @@ import { Response } from 'express';
 import { ApiRequest } from '../../common/http.types';
 import { PUBLIC_ROUTE } from '../../common/public.decorator';
 import { AuthService } from './auth.service';
-export function httpContext(context: ExecutionContext): { req:ApiRequest; res:Response } {
-  return context.getType<string>()==='graphql' ? GqlExecutionContext.create(context).getContext() : { req:context.switchToHttp().getRequest(),res:context.switchToHttp().getResponse() };
+export function httpContext(context: ExecutionContext): { req: ApiRequest; res: Response } {
+  return context.getType<string>() === 'graphql'
+    ? GqlExecutionContext.create(context).getContext()
+    : { req: context.switchToHttp().getRequest(), res: context.switchToHttp().getResponse() };
 }
 @Injectable()
 export class AuthGuard implements CanActivate {
-  constructor(private readonly reflector: Reflector, private readonly auth: AuthService) {}
+  constructor(
+    private readonly reflector: Reflector,
+    private readonly auth: AuthService,
+  ) {}
   async canActivate(context: ExecutionContext) {
-    if (this.reflector.getAllAndOverride(PUBLIC_ROUTE,[context.getHandler(),context.getClass()])) return true;
-    const {req,res}=httpContext(context);
+    if (this.reflector.getAllAndOverride(PUBLIC_ROUTE, [context.getHandler(), context.getClass()]))
+      return true;
+    const { req, res } = httpContext(context);
     if (req.principal) return true;
-    const header=req.headers.authorization, refresh=req.headers['x-refresh-token'];
-    if (!header?.startsWith('Bearer ') || typeof refresh!=='string') throw new UnauthorizedException('Access and refresh token headers are required');
-    req.principal=await this.auth.authenticate(header.slice(7),refresh,res);
+    const header = req.headers.authorization,
+      refresh = req.headers['x-refresh-token'];
+    if (!header?.startsWith('Bearer ') || typeof refresh !== 'string')
+      throw new UnauthorizedException('Access and refresh token headers are required');
+    req.principal = await this.auth.authenticate(header.slice(7), refresh, res);
     return true;
   }
 }

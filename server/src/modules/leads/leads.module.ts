@@ -4,5 +4,10 @@ import { LeadsService } from './leads.service';
 import { LeadsController } from './leads.controller';
 import { LeadStatusService } from './lead-status.service';
 import { EventsModule } from '../events/events.module';
-@Module({imports:[EventsModule],controllers:[LeadsController],providers:[LeadsRepository,LeadsService,LeadStatusService],exports:[LeadsService]})
+@Module({
+  imports: [EventsModule],
+  controllers: [LeadsController],
+  providers: [LeadsRepository, LeadsService, LeadStatusService],
+  exports: [LeadsService],
+})
 export class LeadsModule {}
