@@ -12,3 +12,6 @@ Milestone 1: project-plan.
 
 ## server-setup
 Backend dependencies installed; TypeScript build and 3 configuration tests passed.
+
+## app-setup
+Independent Vite production build and component smoke test passed.
