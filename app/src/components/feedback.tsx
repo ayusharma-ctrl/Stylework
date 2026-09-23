@@ -5,7 +5,7 @@ export function Loading() {
   return (
     <div role="status" className="flex min-h-48 items-center justify-center gap-3 text-muted-foreground">
       <LoaderCircle size={20} className="animate-spin" />
-      Loading your workspace…
+      Loading your data…
     </div>
   );
 }

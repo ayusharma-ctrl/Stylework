@@ -12,7 +12,7 @@ export function RefreshNotice({ refresh }: { refresh: () => Promise<unknown> }) 
   if (!data || data.revision === revision) return null;
   return (
     <div className="refresh-notice">
-      <span>Your workspace has new activity.</span>
+      <span>New activity is available.</span>
       <Button
         size="sm"
         variant="ghost"

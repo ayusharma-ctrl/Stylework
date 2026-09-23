@@ -47,7 +47,7 @@ export default function Signin() {
           </p>
           <div className="mt-10 flex flex-col gap-4 text-sm text-slate-600">
             {[
-              'One workspace, every conversation',
+              'Every lead, every conversation',
               'A clear history of every change',
               'Your pipeline, always up to date',
             ].map((label) => (
@@ -71,7 +71,7 @@ export default function Signin() {
           <span className="mb-8 inline-flex rounded-2xl bg-primary/10 p-3 text-primary">
             <Layers3 size={27} />
           </span>
-          <h2 className="text-3xl font-semibold tracking-tight">Welcome to your workspace</h2>
+          <h2 className="text-3xl font-semibold tracking-tight">Welcome to Stylework</h2>
           <p className="mt-3 mb-8 text-muted-foreground">Enter your email to get started.</p>
           <form onSubmit={submit} className="space-y-5">
             <label className="block text-sm font-medium">
@@ -89,13 +89,13 @@ export default function Signin() {
             </label>
             {mutation.error && <ErrorState error={mutation.error} />}
             <Button type="submit" disabled={mutation.isPending} className="h-12 w-full">
-              {mutation.isPending ? 'Opening workspace…' : 'Continue to workspace'}
+              {mutation.isPending ? 'Signing in…' : 'Continue to Stylework'}
               <ArrowRight size={17} />
             </Button>
           </form>
           <p className="mt-6 text-xs leading-relaxed text-muted-foreground">
-            This shared demo workspace uses email-only access. Use a demo email; no password or email
-            verification is required.
+            This demo application uses email-only access. Use a demo email; no password or email verification
+            is required.
           </p>
         </div>
       </section>

@@ -10,7 +10,7 @@ describe('sign in', () => {
       </QueryClientProvider>,
     );
     expect(screen.getByRole('textbox', { name: 'Email address' })).toHaveAttribute('type', 'email');
-    expect(screen.getByRole('button', { name: /Continue to workspace/ })).toBeEnabled();
+    expect(screen.getByRole('button', { name: /Continue to Stylework/ })).toBeEnabled();
     expect(screen.getByText(/no password or email verification/)).toBeInTheDocument();
   });
 });

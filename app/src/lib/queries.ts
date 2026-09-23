@@ -1,13 +1,18 @@
 import { infiniteQueryOptions, queryOptions } from '@tanstack/react-query';
-import { api, graphql } from './api';
+import { api } from './api';
 import type { Activity, Connection, Lead, Profile } from './types';
 export const meOptions = queryOptions({
   queryKey: ['me'],
   queryFn: ({ signal }) => api<Profile>('/me', { signal }),
 });
-export const leadFields =
-  'id fullName email phone company campaign version createdAt status { id name color archivedAt }';
-const pageFields = 'pageInfo { startCursor endCursor hasNextPage hasPreviousPage }';
+export function queryString(values: Record<string, unknown>) {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(values)) {
+    if (value === undefined || value === null || (Array.isArray(value) && !value.length)) continue;
+    params.set(key, Array.isArray(value) ? value.join(',') : String(value));
+  }
+  return params.toString();
+}
 type Cursor = { after?: string; before?: string };
 export function leadsOptions(filters: Record<string, unknown> = {}) {
   const normalized = { search: '', sort: 'CREATED_AT', direction: 'DESC', ...filters };
@@ -16,14 +21,12 @@ export function leadsOptions(filters: Record<string, unknown> = {}) {
     initialPageParam: {} as Cursor,
     maxPages: 20,
     staleTime: Infinity,
-    queryFn: async ({ pageParam, signal }) =>
-      (
-        await graphql<{ leads: Connection<Lead> }>(
-          `query Leads($input:LeadQueryInput){leads(input:$input){nodes{${leadFields}} ${pageFields}}}`,
-          { input: { ...normalized, ...pageParam, ...(pageParam.before ? { last: 50 } : { first: 50 }) } },
-          signal,
-        )
-      ).leads,
+    queryFn: ({ pageParam, signal }) =>
+      api<Connection<Lead>>(
+        '/leads?' +
+          queryString({ ...normalized, ...pageParam, ...(pageParam.before ? { last: 50 } : { first: 50 }) }),
+        { signal },
+      ),
     getNextPageParam: (last): Cursor | undefined =>
       last.pageInfo.hasNextPage ? { after: last.pageInfo.endCursor! } : undefined,
     getPreviousPageParam: (first): Cursor | undefined =>
@@ -33,14 +36,7 @@ export function leadsOptions(filters: Record<string, unknown> = {}) {
 export const leadOptions = (id: string) =>
   queryOptions({
     queryKey: ['lead', id],
-    queryFn: async ({ signal }) =>
-      (
-        await graphql<{ lead: Lead }>(
-          `query Lead($id:ID!){lead(id:$id){${leadFields} updatedAt source externalId sourceVersion metadata}}`,
-          { id },
-          signal,
-        )
-      ).lead,
+    queryFn: ({ signal }) => api<Lead>('/leads/' + encodeURIComponent(id), { signal }),
   });
 export function activitiesOptions(filters: Record<string, unknown> = {}) {
   return infiniteQueryOptions({
@@ -48,14 +44,12 @@ export function activitiesOptions(filters: Record<string, unknown> = {}) {
     initialPageParam: {} as Cursor,
     maxPages: 20,
     staleTime: Infinity,
-    queryFn: async ({ pageParam, signal }) =>
-      (
-        await graphql<{ activities: Connection<Activity> }>(
-          `query Activities($input:ActivityQueryInput){activities(input:$input){nodes{id leadId type summary actor before after requestId createdAt} ${pageFields}}}`,
-          { input: { ...filters, ...pageParam, ...(pageParam.before ? { last: 25 } : { first: 25 }) } },
-          signal,
-        )
-      ).activities,
+    queryFn: ({ pageParam, signal }) =>
+      api<Connection<Activity>>(
+        '/activities?' +
+          queryString({ ...filters, ...pageParam, ...(pageParam.before ? { last: 25 } : { first: 25 }) }),
+        { signal },
+      ),
     getNextPageParam: (last): Cursor | undefined =>
       last.pageInfo.hasNextPage ? { after: last.pageInfo.endCursor! } : undefined,
     getPreviousPageParam: (first): Cursor | undefined =>

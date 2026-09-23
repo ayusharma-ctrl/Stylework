@@ -10,7 +10,7 @@ OpenAI Codex assisted this implementation. The session identifies the assistant 
 - The user subsequently limited sample data to 10–12 users, 100–200 leads and 50–100 additional activities. Final defaults are 12/150/75, plus one creation audit per lead. Large-data benchmarking was stopped and its temporary database/tooling removed.
 
 ## Human decisions
-The user specified the technology stack, independent app/server structure, shared workspace, authentication/token storage behavior, deployment targets, scope, and requested commit/testing cadence.
+The user specified the technology stack, independent app/server structure, single-tenant application, authentication/token storage behavior, deployment targets, scope, and requested commit/testing cadence.
 
 ## AI-assisted sections
 Codex authors implementation code, initial scaffolding, migrations, tests, Docker/deployment configuration, and documentation under the agreed decisions. Human review and actual manual changes should be recorded when they occur; none are invented here.
@@ -19,7 +19,12 @@ Codex authors implementation code, initial scaffolding, migrations, tests, Docke
 The human supplied the requirements, implementation-plan approval and subsequent scope/authentication corrections. This session does not establish manually authored application code or documentation sections. Future manual contributions can be recorded with their commits.
 
 ## Architecture decisions
-See [architecture](docs/architecture.md). Key decisions: durable PostgreSQL inbox/outbox, idempotent workers, atomic audit and counters, configurable archived statuses, bounded GraphQL queries, fetch-based SSE, and independently deployable packages.
+See [architecture](docs/architecture.md). Key decisions: durable PostgreSQL inbox/outbox, idempotent workers, atomic audit and counters, configurable archived statuses, bounded REST queries, fetch-based SSE, and independently deployable packages.
 
 ## Validation
 On 23 September 2026, local verification passed 23 backend unit tests, 22 real PostgreSQL/Redis integration scenarios, 6 frontend tests and one Chromium journey, both production builds, full Compose startup and the webhook-to-dashboard smoke. Test code was AI-assisted. Fault injection and redelivery cover important transaction boundaries; exhaustive process-kill/soak testing remains unimplemented. Render/Vercel/CI configuration parses locally, but hosted publication and remote CI have not run. Results and remaining limits are maintained in the project progress reference and README. Unexecuted tests and performance targets are not reported as passed.
+
+## September 24 follow-up
+The human requested REST-only APIs, date-filter fixes, separate model files, removal of workspace/tenant concepts, response compression and manual lead creation through the webhook. Codex implemented these changes and regression tests. The active architecture supersedes the historical GraphQL design above. Application settings remain a singleton because default status, timezone and catalog revision are used in transactional business rules; migration 003 preserves existing values. No human-written code or different model identity is inferred. Verification results are recorded in the project progress reference.
+
+Revised local verification passed 22 backend unit tests, 25 database/Redis integration scenarios, 7 frontend tests, 2 Chromium journeys, both builds and the container smoke. Migration counts/configuration were checked before and after, and frontend gzip asset equality was verified. The user's pre-existing Jest configuration change was preserved separately. No large load tests or new bulk datasets were generated.

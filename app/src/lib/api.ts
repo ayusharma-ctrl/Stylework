@@ -53,7 +53,7 @@ async function request(path: string, options: RequestInit = {}) {
   if (!response.ok) {
     if (response.status === 401) clearSession();
     throw new ApiError(
-      body.error?.message || body.errors?.[0]?.message || 'Request failed. Please try again.',
+      body.error?.message || 'Request failed. Please try again.',
       response.status,
       body.meta?.requestId || response.headers.get('X-Request-ID') || undefined,
     );
@@ -62,23 +62,5 @@ async function request(path: string, options: RequestInit = {}) {
 }
 export async function api<T>(path: string, options: RequestInit = {}): Promise<T> {
   return (await request(path, options)).data;
-}
-export async function graphql<T>(
-  query: string,
-  variables: Record<string, unknown>,
-  signal?: AbortSignal,
-): Promise<T> {
-  const body = await request('/graphql', {
-    method: 'POST',
-    body: JSON.stringify({ query, variables }),
-    signal,
-  });
-  if (body.errors?.length) {
-    const error = body.errors[0];
-    const status = error.extensions?.http?.status || 400;
-    if (status === 401) clearSession();
-    throw new ApiError(error.message, status, body.extensions?.requestId);
-  }
-  return body.data;
 }
 export const json = (value: unknown) => JSON.stringify(value);

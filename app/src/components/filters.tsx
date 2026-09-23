@@ -125,6 +125,7 @@ export function FilterBar({ statuses, activity = false }: { statuses?: Status[];
         <Input
           type="date"
           aria-label="Created from"
+          max={params.get('to') || undefined}
           value={params.get('from') || ''}
           onChange={(e) => update('from', e.target.value)}
         />
@@ -134,6 +135,7 @@ export function FilterBar({ statuses, activity = false }: { statuses?: Status[];
         <Input
           type="date"
           aria-label="Created through"
+          min={params.get('from') || undefined}
           value={params.get('to') || ''}
           onChange={(e) => update('to', e.target.value)}
         />

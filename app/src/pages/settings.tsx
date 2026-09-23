@@ -33,7 +33,7 @@ export default function SettingsPage() {
   });
   if (profile.isPending) return <Loading />;
   if (profile.error) return <ErrorState error={profile.error} retry={() => void profile.refetch()} />;
-  const { statuses, workspace } = profile.data,
+  const { statuses, settings } = profile.data,
     active = statuses.filter((s) => !s.archivedAt);
   function save(event: FormEvent) {
     event.preventDefault();
@@ -66,7 +66,7 @@ export default function SettingsPage() {
       <div className="page-heading">
         <div>
           <span className="eyebrow">MAKE ROOM FOR YOUR WORKFLOW</span>
-          <h1>Workspace settings</h1>
+          <h1>Settings</h1>
           <p>A pipeline that works the way your team does.</p>
         </div>
       </div>
@@ -97,7 +97,7 @@ export default function SettingsPage() {
               <span className="status-swatch" style={{ background: status.color }} />
               <div className="min-w-0 flex-1">
                 <strong>{status.name}</strong>
-                {workspace.defaultStatusId === status.id && (
+                {settings.defaultStatusId === status.id && (
                   <span className="default-badge">
                     <Check size={11} />
                     Default
@@ -123,7 +123,7 @@ export default function SettingsPage() {
                 >
                   <ArrowDown size={14} />
                 </Button>
-                {workspace.defaultStatusId !== status.id && (
+                {settings.defaultStatusId !== status.id && (
                   <Button
                     variant="ghost"
                     size="sm"
@@ -201,7 +201,7 @@ export default function SettingsPage() {
         <div className="panel-heading">
           <div>
             <h2>Appearance</h2>
-            <p>Settle into a workspace that feels right.</p>
+            <p>Choose a theme that feels right.</p>
           </div>
         </div>
         <div className="flex flex-wrap gap-3 px-6 pb-6">
@@ -278,7 +278,7 @@ export default function SettingsPage() {
       >
         {archive && (
           <div className="space-y-5">
-            {archive.id === workspace.defaultStatusId && (
+            {archive.id === settings.defaultStatusId && (
               <label className="block text-sm font-medium">
                 New default status
                 <Select
@@ -310,7 +310,7 @@ export default function SettingsPage() {
                     method: 'DELETE',
                     body: {
                       expectedVersion: archive.version,
-                      ...(archive.id === workspace.defaultStatusId
+                      ...(archive.id === settings.defaultStatusId
                         ? { replacementStatusId: replacement }
                         : {}),
                     },

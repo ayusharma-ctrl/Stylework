@@ -1,6 +1,6 @@
-# Stylework lead workspace
+# Stylework lead management
 
-A shared lead intake workspace built with React and a modular NestJS monolith. PostgreSQL owns durable intake, business state and audit history; Redis handles shared limits, BullMQ delivery and change notifications. The API and worker run independently from the same server codebase.
+A single-tenant lead intake application built with React and a modular NestJS monolith. PostgreSQL owns durable intake, business state and audit history; Redis handles shared limits, BullMQ delivery and change notifications. The API and worker run independently from the same server codebase.
 
 **Local app:** http://localhost:8080 · **Local API:** http://localhost:3000
 
@@ -11,7 +11,7 @@ A shared lead intake workspace built with React and a modular NestJS monolith. P
 ```mermaid
 flowchart LR
   Caller[Caller with X-Webhook-Key] --> API[NestJS API]
-  UI[React workspace] -->|REST and GraphQL| API
+  UI[React application] -->|REST| API
   API -->|Receipt + outbox transaction| PG[(PostgreSQL)]
   PG --> Dispatcher[Outbox dispatcher]
   Dispatcher --> Queue[(Redis / BullMQ)]
@@ -22,7 +22,7 @@ flowchart LR
   API -->|SSE snapshots| UI
 ```
 
-`app/` and `server/` each own their dependencies, lockfile, TypeScript configuration and Dockerfile. There is no shared runtime package. Nest modules own authentication, users, leads, activities, statuses, webhooks, jobs, dashboard and health. Controllers/resolvers call services; repositories contain read queries and persistence access. Database models, migrations and seeders live under `server/src/database/`.
+`app/` and `server/` each own their dependencies, lockfile, TypeScript configuration and Dockerfile. There is no shared runtime package. Nest modules own authentication, users, leads, activities, statuses, webhooks, jobs, dashboard and health. Controllers call services; repositories contain read queries and persistence access. Each model has its own file in `server/src/database/models/`; migrations and seeders live under `server/src/database/`.
 
 ### Correctness boundaries
 
@@ -32,6 +32,8 @@ flowchart LR
 - The dispatcher claims rows with `FOR UPDATE SKIP LOCKED`; deterministic BullMQ job IDs avoid duplicate queue entries. Pending PostgreSQL receipts are periodically reconciled even if their outbox was previously published. Redis loss can delay processing but cannot erase an acknowledged receipt.
 - Status changes use `expectedVersion`; a concurrent stale edit gets 409. Status IDs remain stable, with soft archival and atomic default replacement. Existing leads, counts, filters and history remain intact.
 - Counters spread across 64 lead-ID shards. SSE computes consistent snapshots, sends dynamic cards/statuses, coalesces updates to once/second, and reconciles every 30 seconds. Reporting uses `Asia/Kolkata`; stored timestamps are UTC. A zero yesterday denominator produces `null`.
+
+The singleton `app_settings` row stores the default status, timezone and catalog revision. It has a database `CHECK(id=1)` and no tenant ownership or workspace relationships. Migration 003 renames the earlier settings table without losing configuration.
 
 See [architecture decisions](docs/architecture.md), [AI collaboration record](AGENT.md), and [project skill/progress](.agents/skills/stylework-project/SKILL.md).
 
@@ -62,6 +64,12 @@ npm run dev
 ```
 
 In another terminal, run `npm run dev:worker` from `server/`. In `app/`, run `npm ci`, copy `.env.example` to `.env`, then `npm run dev`. On PowerShell, use `Copy-Item .env.example .env` instead of `cp` if preferred. Stop the Compose API before binding the native API to port 3000.
+
+### Adding a lead manually
+
+Use **Add lead** on the leads page. The dialog sends a full snapshot to `POST /webhook/meta-lead` using the current access/refresh headers. It never exposes an integration key. Manual requests receive ordinary mutation quotas, use source `manual` (isolated from `meta`), and capture the signed-in actor in the receipt and audit. They require version 1 and a UUID external lead ID. The UI preserves the submitted event ID/body for retries, polls the durable receipt for up to 30 seconds, then offers an explicit progress check. After processing it opens the lead. Validation failures allow editing; uncertain network failures retry the same submission.
+
+Receipt lookup accepts `?source=manual` (default `meta`). Replay accepts `EVENT_ID [meta|manual]`. Closing the dialog retains its draft while the leads page remains mounted; a page reload does not retain that draft.
 
 ### Webhook credentials in PostgreSQL
 
@@ -105,13 +113,13 @@ Send JSON with `Content-Type: application/json` and `X-Webhook-Key`. At least on
 
 | Method and route | Purpose |
 |---|---|
-| `POST /signin` | `{email}` → user, catalog, workspace, access/refresh tokens |
+| `POST /signin` | `{email}` → user, catalog, settings, access/refresh tokens |
 | `GET /me`, `PATCH /me` | Profile/catalog; allowlisted theme preference |
 | `POST /signout` | Revoke the current session |
 | `POST /webhook/meta-lead` | Durable asynchronous snapshot intake |
 | `GET /webhook-events/:eventId` | Pending/processed/ignored/failed outcome and safe diagnostics |
-| `POST /graphql` | Selectable leads, lead detail and activity connections |
-| `GET /leads`, `GET /leads/:id` | REST reads through the same services |
+| `GET /activities` | Searchable, filtered, cursor-paginated activity history |
+| `GET /leads`, `GET /leads/:id` | Paginated lead list and lead detail |
 | `PATCH /leads/:id/status` | `{statusId,expectedVersion}` |
 | `GET /statuses`, `POST /statuses` | Catalog; create `{name,color}` |
 | `PATCH /statuses/:id` | `{expectedVersion,name?,color?,position?,isDefault?:true}` |
@@ -121,23 +129,15 @@ Send JSON with `Content-Type: application/json` and `X-Webhook-Key`. At least on
 | `GET /health/live`, `/health/ready` | Process/dependency health |
 | `GET /metrics` | Prometheus; separate `Authorization: Bearer METRICS_TOKEN` |
 
-Protected application requests require both `Authorization: Bearer ACCESS_TOKEN` and `X-Refresh-Token: REFRESH_TOKEN`. REST returns `{data,meta:{requestId}}`; errors return `{error:{code,message},meta}`. GraphQL uses standard responses with trace extensions. SSE sends unwrapped JSON in default `data:` events.
+Protected application requests require both `Authorization: Bearer ACCESS_TOKEN` and `X-Refresh-Token: REFRESH_TOKEN`. REST returns `{data,meta:{requestId}}`; errors return `{error:{code,message},meta}`. SSE sends unwrapped JSON in default `data:` events.
 
-```graphql
-query Workspace($input: LeadQueryInput, $id: ID!) {
-  leads(input: $input) {
-    nodes { id fullName email status { id name color } }
-    pageInfo { startCursor endCursor hasNextPage hasPreviousPage }
-  }
-  lead(id: $id) { id fullName company version status { id name } }
-  activities(input: { leadId: $id, first: 10 }) {
-    nodes { id type summary actor createdAt before after }
-    pageInfo { endCursor hasNextPage }
-  }
-}
+```http
+GET /leads?first=50&sort=CREATED_AT&direction=DESC&createdFrom=2026-09-01T00%3A00%3A00%2B05%3A30&createdTo=2026-10-01T00%3A00%3A00%2B05%3A30
+GET /leads/LEAD_UUID
+GET /activities?leadId=LEAD_UUID&types=LEAD_CREATED,STATUS_CHANGED&first=25
 ```
 
-Lead inputs: `first/after` or `last/before`, `search`, `statusIds`, `source`, `createdFrom`, exclusive `createdTo`, `sort` (`CREATED_AT`, `UPDATED_AT`, `NAME`) and `direction`. Activity inputs additionally allow `leadId`, `actorId`, and `types`. Default page 50, maximum 100. Cursors are signed and bound to filters. Query complexity may require smaller pages when requesting large metadata/before/after fields. Creation-time cutoffs exclude new arrivals; mutable sort keys can still move between pages, so refresh after concurrent edits.
+Lead inputs: `first/after` or `last/before`, `search`, `statusIds`, `source`, `createdFrom`, exclusive `createdTo`, `sort` (`CREATED_AT`, `UPDATED_AT`, `NAME`) and `direction`. Activity inputs additionally allow `leadId`, `actorId`, and `types`. Default page 50, maximum 100. Cursors are signed and bound to filters. Array filters use comma-separated values (`statusIds`, `types`). Date bounds are timestamps: start inclusive, end exclusive. The UI converts inclusive calendar dates in Asia/Kolkata into these bounds, including same-day ranges. Creation-time cutoffs exclude new arrivals; mutable sort keys can still move between pages, so refresh after concurrent edits.
 
 ## Authentication and abuse controls
 
@@ -153,9 +153,15 @@ Access JWTs live 15 minutes, refresh JWTs seven days, with separate secrets/type
 | Webhook | 500/second/integration, burst 1,000; 1,000/second/IP |
 | SSE | 3 concurrent streams/user, across API instances |
 
-Redis token buckets are atomic, return `429`/`Retry-After`, and fail closed with 503. IP checks precede expensive work; authenticated integration/user checks follow verification. JSON is limited to 64 KiB, metadata to 16 KiB. Supplied origins must exactly match `CLIENT_ORIGINS`; missing Origin is allowed for authenticated CLI callers. Forwarded IPs are trusted only through configured proxy ranges. GraphQL rejects batching/multiple operations and limits depth 8, aliases 20, complexity 1,000. SQL values are parameterized and sort columns allowlisted.
+Redis token buckets are atomic, return `429`/`Retry-After`, and fail closed with 503. IP checks precede expensive work; authenticated integration/user checks follow verification. JSON is limited to 64 KiB, metadata to 16 KiB. Supplied origins must exactly match `CLIENT_ORIGINS`; missing Origin is allowed for authenticated CLI callers. Forwarded IPs are trusted only through configured proxy ranges. REST rejects unknown filters, unsupported sorts and pages above 100. SQL values are parameterized and sort columns allowlisted.
 
 Database pools, queue concurrency, admission backlog and request duration are bounded. Each API instance admits at most `MAX_INFLIGHT_REQUESTS` (default 32) ordinary requests at once and returns retryable 503 rather than building an unbounded database wait queue. New intake also returns 503 when the observed pending backlog reaches `MAX_PENDING_EVENTS` (default 100,000); the cached check is an overload signal, not an exact hard quota. Hosting-edge limits/WAF are still needed for volumetric attacks. SSE has separate admission, heartbeats, session checks, five-minute reconnects and slow-consumer closure; revocation can take up to the 15-second heartbeat interval.
+
+## Response compression
+
+The API uses [Express compression](https://expressjs.com/en/resources/middleware/compression/) with gzip/Brotli negotiation and a 1 KiB threshold. Gzip level 4 and Brotli quality 4 bound CPU cost. SSE remains uncompressed to preserve prompt streaming; sign-in responses containing tokens are excluded. Requests remain ordinary bounded JSON; compressed request bodies are rejected. Browsers decompress responses automatically, with no frontend codec dependency.
+
+The Docker frontend uses [Nginx gzip](https://nginx.org/en/docs/http/ngx_http_gzip_module.html) for HTML, JavaScript, CSS, JSON and SVG, with `Vary: Accept-Encoding`. Vercel handles compression at its hosting edge. Static assets keep immutable caching.
 
 ## Testing and capacity scope
 
@@ -174,9 +180,9 @@ npm run test:e2e
 
 Integration creates a unique disposable `stylework_test_*` database and reserves Redis DB 15. Defaults use local Compose dependencies; override `TEST_DATABASE_URL` (a PostgreSQL admin connection) and `TEST_REDIS_URL` as needed. Never point these tests at customer infrastructure. The full smoke requires API and worker; it creates and revokes a temporary database webhook key unless `WEBHOOK_KEY` is provided. It adds a synthetic lead and retains its audit trail.
 
-Local verification on 23 September 2026 passed: **23 backend unit tests, 22 real PostgreSQL/Redis integration scenarios, 6 frontend tests and 1 Playwright journey**, plus independent production builds, complete Compose startup and the webhook-to-dashboard smoke journey. Desktop light/dark and mobile screenshots were inspected. Integration verifies injected database rollback, duplicate acceptance/redelivery, ordering, session races, query limits, audit immutability, SSE revocation and recovery after Redis data loss. Crash boundaries are exercised through transaction fault injection and committed-job redelivery; exhaustive process-kill timing and multi-region chaos are future work. Hosted deployment and remote GitHub Actions execution have not been verified.
+Local verification on 24 September 2026 passed: **22 backend unit tests, 25 real PostgreSQL/Redis integration scenarios, 7 frontend tests and 2 Playwright journeys**, plus independent production builds, complete Compose startup and the REST webhook-to-dashboard smoke journey. Superseded GraphQL tests were replaced by REST coverage. New regressions verify date boundaries, manual intake/authentication/quotas/audit, source isolation and compression negotiation. Chromium verifies manual creation and both same-day date filters with no GraphQL traffic. Frontend gzip responses decompress to the original asset. Desktop light/dark and mobile screenshots were inspected. Integration also verifies injected database rollback, duplicate acceptance/redelivery, ordering, session races, query limits, audit immutability, SSE revocation and recovery after Redis data loss. Crash boundaries are exercised through transaction fault injection and committed-job redelivery; exhaustive process-kill timing and multi-region chaos are future work. Hosted deployment and remote GitHub Actions execution have not been verified.
 
-The architecture aims to support millions of requests through bounded admission, durable asynchronous work, indexed reads and independent API/worker scaling. **This is an architectural target, not a certified throughput guarantee.** Per the revised user scope, demo data stays small and large datasets/load tests are excluded. An earlier local experiment did not meet the latency targets; it prompted read-quota and admission fixes, and its temporary database and large benchmark tooling were removed. No million-request capacity claim is made. Deployment-specific load validation requires separate authorization.
+The architecture aims to support millions of requests through bounded admission, durable asynchronous work, indexed reads and independent API/worker scaling. **This is an architectural target, not a certified throughput guarantee.** Per the revised user scope, demo data stays small and large datasets/load tests are excluded. An earlier local experiment did not meet the latency targets; it prompted quota and admission fixes, and its temporary database and large benchmark tooling were removed. No million-request capacity claim is made. Deployment-specific load validation requires separate authorization.
 
 ## Deployment steps
 
@@ -185,6 +191,8 @@ The architecture aims to support millions of requests through bounded admission,
 3. Import the repo into Vercel with **Root Directory `app`**, Node 24 and `VITE_API_URL=https://YOUR-API.onrender.com`. [app/vercel.json](app/vercel.json) supplies SPA rewrites and response headers. Set the resulting exact Vercel/custom origin in the API and redeploy. Avoid wildcard preview origins for a shared database. See [Vercel configuration](https://vercel.com/docs/project-configuration).
 4. Run the credential creation CLI in the API service shell. Supply the resulting key only to the sender. Do not seed demo leads automatically in production. Explicit demonstration seeding requires `ALLOW_DEMO_SEED=true`.
 5. Verify readiness, run a signed-in browser journey and send one keyed webhook through the deployed worker. Record the public app/API URLs here after owner publication.
+
+**Upgrade note:** migration 003 renames the configuration table. Stop the old API/worker, migrate once, then start both with the new image. Do not run old and new versions together during this rename. Fresh Compose startup handles migrations automatically.
 
 Start with API pool 10 + worker pool 10 + migration pool 10 = **30 potential PostgreSQL connections**, plus administrative headroom. Scale this budget with every replica and align it with the database tier; more application workers do not create database capacity. Redis also needs headroom for queue connections, rate keys and retained jobs. Use TLS, restricted network access, backups and a runtime DB role with only required DML privileges; audit mutation is blocked even if a writer accidentally issues it.
 
@@ -202,12 +210,12 @@ Start with API pool 10 + worker pool 10 + migration pool 10 = **30 potential Pos
 
 The modular monolith keeps transactions and deployment understandable; separate API/worker processes isolate admission from processing. PostgreSQL row/advisory locks and constraints establish correctness; Redis leases only coordinate stream admission. Database-first intake adds a write before acknowledgement but provides a durable acceptance boundary. Sharded counters avoid a singleton hot row at the cost of reconciliation tooling. Configurable statuses are data rather than enums, so renames and archival need no lead backfill.
 
-This is one shared workspace with broad signed-in permissions and an explicitly weak identity flow. There is no tenant isolation/RBAC, external Meta handshake, contact editing UI or hard deletion. Lists retain at most 20 pages and use virtualization; old pages can be fetched backward. SSE carries complete snapshots and uses fetch for both token headers. The UI shows a refresh notice instead of silently reordering lists on incoming changes.
+This is a single-tenant application with broad signed-in permissions and an explicitly weak identity flow. There is no tenant isolation/RBAC, external Meta handshake, contact editing UI or hard deletion. Lists retain at most 20 pages and use virtualization; old pages can be fetched backward. SSE carries complete snapshots and uses fetch for both token headers. The UI shows a refresh notice instead of silently reordering lists on incoming changes.
 
 ## Scaling considerations
 
-Scale API and worker replicas independently using measured latency, pool wait and backlog age. Keep the same JWT secrets, PostgreSQL and Redis across replicas. Cap total connections, load-test indexes with realistic selectivity, and watch hot tenants/statuses. Apply CDN/edge filtering before the API. Separate BullMQ Redis from ephemeral limiter/cache traffic when contention or memory pressure justifies it. Add table partitioning, receipt/outbox retention, targeted read replicas and database capacity before assuming horizontal application scaling is sufficient. Distributed locking alone cannot make an unbounded workload safe.
+Scale API and worker replicas independently using measured latency, pool wait and backlog age. Keep the same JWT secrets, PostgreSQL and Redis across replicas. Cap total connections, load-test indexes with realistic selectivity, and watch hot statuses. Apply CDN/edge filtering before the API. Separate BullMQ Redis from ephemeral limiter/cache traffic when contention or memory pressure justifies it. Add table partitioning, receipt/outbox retention, targeted read replicas and database capacity before assuming horizontal application scaling is sufficient. Distributed locking alone cannot make an unbounded workload safe.
 
 ## Future improvements
 
-Verified identity and hashed refresh sessions; tenant isolation and roles; actual Meta subscription/Graph API enrichment; OpenTelemetry tracing and alert dashboards; process-kill chaos at every queue acknowledgement boundary; cross-instance/long-duration SSE and browser coverage; accessible table keyboard navigation across unloaded pages; production load/soak tests and recovery drills; retention/partition automation; finer GraphQL field projection; managed backups and disaster-recovery SLOs.
+Verified identity and hashed refresh sessions; verified roles; actual Meta subscription/Graph API enrichment; OpenTelemetry tracing and alert dashboards; process-kill chaos at every queue acknowledgement boundary; cross-instance/long-duration SSE and browser coverage; accessible table keyboard navigation across unloaded pages; production load/soak tests and recovery drills; retention/partition automation; managed backups and disaster-recovery SLOs.

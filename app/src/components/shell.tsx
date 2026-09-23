@@ -4,7 +4,6 @@ import { useQuery } from '@tanstack/react-query';
 import {
   Activity,
   ArrowUpRight,
-  ChevronDown,
   LayoutDashboard,
   Layers3,
   LogOut,
@@ -66,7 +65,7 @@ export default function Shell() {
   const user = profile.data.user,
     title =
       navigation.find((n) => (n.to === '/' ? location.pathname === '/' : location.pathname.startsWith(n.to)))
-        ?.label || 'Workspace';
+        ?.label || 'Stylework';
   async function signout() {
     try {
       await api('/signout', { method: 'POST', body: '{}' });
@@ -81,7 +80,7 @@ export default function Shell() {
     void api('/me', { method: 'PATCH', body: json({ theme: next }) }).catch(() => {});
   }
   return (
-    <div className="workspace">
+    <div className="application">
       {mobile && (
         <button className="sidebar-backdrop" aria-label="Close navigation" onClick={() => setMobile(false)} />
       )}
@@ -92,15 +91,14 @@ export default function Shell() {
           </span>
           stylework<span className="brand-dot">.</span>
         </NavLink>
-        <div className="workspace-switch">
-          <span className="workspace-avatar">S</span>
+        <div className="application-info">
+          <span className="application-avatar">S</span>
           <div>
-            <strong>Stylework workspace</strong>
-            <small>Shared workspace</small>
+            <strong>Lead management</strong>
+            <small>Your lead pipeline</small>
           </div>
-          <ChevronDown size={14} />
         </div>
-        <span className="nav-label">WORKSPACE</span>
+        <span className="nav-label">NAVIGATION</span>
         <nav aria-label="Main navigation">
           {navigation.map(({ to, label, icon: Icon }) => (
             <NavLink
@@ -116,7 +114,7 @@ export default function Shell() {
           ))}
         </nav>
         <div className="sidebar-bottom">
-          <div className="workspace-note">
+          <div className="application-note">
             <span className="flex items-center gap-2 text-sm font-semibold">
               <span className="h-2 w-2 rounded-full bg-teal-500" />
               All together, in one place
@@ -139,7 +137,7 @@ export default function Shell() {
           </div>
         </div>
       </aside>
-      <div className="workspace-main">
+      <div className="application-main">
         <header className="topbar">
           <div className="flex items-center gap-3">
             <Button
@@ -151,7 +149,7 @@ export default function Shell() {
             >
               {mobile ? <X size={20} /> : <Menu size={20} />}
             </Button>
-            <span className="text-muted-foreground">Workspace</span>
+            <span className="text-muted-foreground">Stylework</span>
             <span className="text-border">/</span>
             <strong>{title}</strong>
           </div>
@@ -175,8 +173,8 @@ export default function Shell() {
           {logoutError && <ErrorState error={logoutError} />}
           <Outlet />
         </main>
-        <footer className="workspace-footer">
-          <span>Stylework lead workspace</span>
+        <footer className="application-footer">
+          <span>Stylework lead management</span>
           <span>Thoughtfully connected.</span>
         </footer>
       </div>

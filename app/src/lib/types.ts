@@ -9,7 +9,7 @@ export interface Status {
 export interface Profile {
   user: { id: string; email: string; meta: { theme?: Theme } };
   statuses: Status[];
-  workspace: { defaultStatusId: string; timezone: string; catalogVersion: number };
+  settings: { defaultStatusId: string; timezone: string; catalogVersion: number };
 }
 export type Theme = 'light' | 'dark' | 'system';
 export interface Tokens {

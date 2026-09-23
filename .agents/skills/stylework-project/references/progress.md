@@ -4,12 +4,19 @@
 - Recorded agreed architecture and 18-commit sequence.
 - Implemented the API, worker, database, React workspace, tests and deployment configuration across all 18 local milestones.
 ## Current
-September 24 follow-up: REST-only refactor, date-filter fix, compression, separate model files, single-tenant settings and manual lead creation implemented. Final Docker/browser checks in progress.
+September 24 follow-up complete: REST-only APIs, date-filter fix, response compression, separate model files, single-tenant settings and manual lead creation. Rebuilt Docker stack and browser checks pass.
 ## Remaining
 Hosted publication, public URLs and remote CI execution are not completed. Deployment-specific throughput/soak and exhaustive process-kill tests remain unverified; do not run large-data tests without new explicit authorization.
 
 ## September 24 revision
 Confirmed the date-range failure with Sequelize's replacement parser: `<:to` stays literal SQL, whereas `< :to` is substituted. Fixed both read repositories and compare date instants across offsets. Removed GraphQL modules/dependencies and obsolete milestone smoke scripts; GET /activities and REST frontend retain bounded bidirectional pagination. Models are split into separate files. Migration 003 renames the singleton configuration without resetting data and adds trusted intake actor fields. Manual submissions authenticate with sessions on the same webhook route, use source manual, preserve duplicate semantics and generate user-attributed audit. Added gzip/Brotli API compression, Nginx static compression and exclusions for SSE/sign-in. Initial revised checks: backend build, 22 unit tests, 24 integration scenarios and frontend build/7 tests passed. Added final quota/unsupported-encoding regression; browser checks pending. Existing user edit to server/jest.config.cjs is intentionally preserved and excluded from commits.
+
+### Final September 24 verification
+- Backend build, strict unused-symbol type check, 22 unit tests and 25 PostgreSQL/Redis integration scenarios passed. Superseded GraphQL tests were removed and REST/date/manual/compression regressions added.
+- Frontend production build, 7 tests and 2 Chromium journeys passed. The new journey creates a manual lead, verifies its audit, applies both same-day date bounds to leads and activities, and observes no GraphQL requests.
+- Both Docker images rebuilt and all services are healthy. Container REST smoke passed through intake, worker, lead/status/audit and SSE. Static JavaScript negotiated gzip, matched the identity response after decompression and supplied Vary: Accept-Encoding.
+- Migration preserved the default UUID, Asia/Kolkata timezone, catalog revision 19, 155 leads and 256 activities before smoke/browser mutations. workspace_settings no longer exists; app_settings holds the same singleton. Existing user data was not reset and no large dataset/load test ran.
+- Desktop/light/dark and mobile screenshots inspected. Documentation and skill describe the new contracts and coordinated upgrade. Backend committed as simplify-rest-backend; frontend/docs follow in add-manual-leads. The pre-existing Jest config edit remains uncommitted.
 ## Verification
 - Docker restored; both images and the complete stack verified healthy.
 - No application existed before this implementation.

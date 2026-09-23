@@ -1,7 +1,7 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
-import { ArrowUpRight, ListFilter } from 'lucide-react';
+import { ArrowUpRight, ListFilter, Plus } from 'lucide-react';
 import { leadsOptions, meOptions } from '../lib/queries';
 import { usePreferences } from '../lib/store';
 import { date, initials } from '../lib/utils';
@@ -10,7 +10,9 @@ import { VirtualList } from '../components/virtual-list';
 import { Empty, ErrorState, Loading } from '../components/feedback';
 import { RefreshNotice } from '../components/refresh-notice';
 import { Button } from '../components/ui/button';
+import { AddLeadDialog } from '../components/add-lead-dialog';
 export default function LeadsPage() {
+  const [adding, setAdding] = useState(false);
   const [params] = useSearchParams(),
     { data: profile } = useQuery(meOptions);
   const compact = usePreferences((s) => s.users[profile?.user.id || '']?.compact || false),
@@ -46,15 +48,22 @@ export default function LeadsPage() {
           <h1>All leads</h1>
           <p>People, possibilities, and the next step forward.</p>
         </div>
-        <Button
-          variant="outline"
-          onClick={() => profile && setCompact(profile.user.id, !compact)}
-          aria-pressed={compact}
-        >
-          <ListFilter size={16} />
-          {compact ? 'Comfortable view' : 'Compact view'}
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button onClick={() => setAdding(true)}>
+            <Plus size={16} />
+            Add lead
+          </Button>
+          <Button
+            variant="outline"
+            onClick={() => profile && setCompact(profile.user.id, !compact)}
+            aria-pressed={compact}
+          >
+            <ListFilter size={16} />
+            {compact ? 'Comfortable view' : 'Compact view'}
+          </Button>
+        </div>
       </div>
+      <AddLeadDialog open={adding} onOpenChange={setAdding} />
       <section className="panel">
         <FilterBar statuses={profile?.statuses} />
         <RefreshNotice refresh={() => query.refetch()} />

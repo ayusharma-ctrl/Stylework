@@ -25,7 +25,7 @@ export default function DashboardPage() {
       <div className="page-heading">
         <div>
           <span className="eyebrow">A LITTLE CLARITY FOR YOUR DAY</span>
-          <h1>Workspace overview</h1>
+          <h1>Overview</h1>
           <p>Your pipeline at a glance. Every opportunity accounted for.</p>
         </div>
         <span className="date-pill">
@@ -154,7 +154,7 @@ export default function DashboardPage() {
         <div className="panel-heading">
           <div>
             <h2>Fresh opportunities</h2>
-            <p>The latest arrivals in your workspace</p>
+            <p>The latest arrivals in your pipeline</p>
           </div>
           <Button variant="ghost" size="sm" asChild>
             <Link to="/leads">

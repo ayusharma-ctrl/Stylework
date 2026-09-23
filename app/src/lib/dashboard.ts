@@ -72,7 +72,7 @@ export function useDashboardStream() {
             if (!parsed.success) throw Error('Invalid dashboard snapshot');
             queryClient.setQueryData(['dashboard'], parsed.data);
             const profile = queryClient.getQueryData<Profile>(['me']);
-            if (profile && profile.workspace.catalogVersion !== parsed.data.catalogVersion)
+            if (profile && profile.settings.catalogVersion !== parsed.data.catalogVersion)
               void queryClient.invalidateQueries({ queryKey: ['me'] });
           },
           onclose() {
