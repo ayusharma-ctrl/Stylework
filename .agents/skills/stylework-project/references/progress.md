@@ -3,9 +3,9 @@
 - Inspected empty workspace and confirmed Node 24/npm 11/Git availability.
 - Recorded agreed architecture and 18-commit sequence.
 ## Current
-Milestone 14: build-lead-views.
+Milestone 15: build-activity-settings.
 ## Remaining
-14 build-lead-views; 15 build-activity-settings; 16 add-reliability-tests; 17 add-load-tests; 18 document-deployment.
+15 build-activity-settings; 16 add-reliability-tests; 17 add-load-tests; 18 document-deployment.
 ## Verification
 - Docker daemon initially unavailable; restore local engine before integration tests.
 - No application existed before this implementation.
@@ -45,3 +45,6 @@ Dashboard snapshots aggregate sharded counters and a dynamic status catalog in a
 
 ## build-app-shell
 React shell, responsive navigation, semantic light/dark tokens, shadcn-style Radix primitives, email sign-in, sessionStorage credentials, persisted Zustand preferences and cached GraphQL prefetch implemented. Dashboard renders generic SSE metrics and status breakdowns. Component sign-in smoke passed. Independent production build passed after resolving strict TypeScript generic inference. Browser plugin reports its in-app backend unavailable; checking available automation for later visual verification.
+
+## build-lead-views
+Lazy lead list/detail routes, URL search/status/date/sort filters, cursor paging, TanStack virtualization with a 20-page retention limit and scroll anchors implemented. Detail has optimistic status changes with rollback/conflict reload and independent searchable activity timeline. Production build and component smoke passed. In-app browser discovery returned no browsers; Playwright verification follows with the complete UI.
