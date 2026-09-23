@@ -1,14 +1,151 @@
-import {Link,useParams} from 'react-router-dom';
-import {useMutation,useQuery} from '@tanstack/react-query';
-import {ArrowLeft,Building2,Mail,Phone,Radio} from 'lucide-react';
-import {api,ApiError,json,queryClient} from '../lib/api';
-import {leadOptions,meOptions} from '../lib/queries';
-import {dateTime,initials} from '../lib/utils';
-import type {Lead} from '../lib/types';
-import {Select} from '../components/ui/input';
-import {ActivityList} from '../components/activity-list';
-import {Loading,ErrorState} from '../components/feedback';
-export default function LeadDetail(){const {id=''}=useParams(),query=useQuery(leadOptions(id)),{data:profile}=useQuery(meOptions);const change=useMutation({mutationFn:({statusId,expectedVersion}:{statusId:string;expectedVersion:number})=>api<Lead>('/leads/'+id+'/status',{method:'PATCH',body:json({statusId,expectedVersion})}),onMutate:async input=>{await queryClient.cancelQueries({queryKey:['lead',id]});const previous=queryClient.getQueryData<Lead>(['lead',id]),status=profile?.statuses.find(s=>s.id===input.statusId);if(previous&&status)queryClient.setQueryData(['lead',id],{...previous,status});return {previous};},onError:async(error,_input,context)=>{if(context?.previous)queryClient.setQueryData(['lead',id],context.previous);if(error instanceof ApiError&&error.status===409)await queryClient.invalidateQueries({queryKey:['lead',id]});},onSuccess:lead=>{queryClient.setQueryData(['lead',id],lead);void queryClient.invalidateQueries({queryKey:['activities']});queryClient.invalidateQueries({queryKey:['leads'],refetchType:'none'});}});
- if(query.isPending)return <Loading/>;if(query.error)return <ErrorState error={query.error} retry={()=>void query.refetch()}/>;const lead=query.data;
- return <><Link to="/leads" className="mb-6 inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-primary"><ArrowLeft size={15}/>Back to leads</Link><div className="page-heading"><div className="flex items-center gap-4"><span className="avatar detail-avatar">{initials(lead.fullName)}</span><div><span className="eyebrow">LEAD PROFILE</span><h1>{lead.fullName}</h1><p>Added {dateTime(lead.createdAt)}</p></div></div><label className="text-xs font-medium text-muted-foreground">Current status<Select className="mt-2 block min-w-40" aria-label="Lead status" disabled={change.isPending} value={lead.status.id} onChange={e=>change.mutate({statusId:e.target.value,expectedVersion:lead.version})}>{profile?.statuses.filter(status=>!status.archivedAt||status.id===lead.status.id).map(status=><option key={status.id} value={status.id} disabled={!!status.archivedAt}>{status.name}{status.archivedAt?' (archived)':''}</option>)}</Select></label></div>{change.error&&<div className="mb-5"><ErrorState error={change.error}/></div>}<div className="detail-grid"><section className="panel self-start"><div className="panel-heading"><h2>Contact information</h2></div><dl className="contact-details">{[{icon:Mail,label:'Email',value:lead.email,href:lead.email?'mailto:'+lead.email:undefined},{icon:Phone,label:'Phone',value:lead.phone,href:lead.phone?'tel:'+lead.phone:undefined},{icon:Building2,label:'Company',value:lead.company},{icon:Radio,label:'Campaign',value:lead.campaign}].map(({icon:Icon,label,value,href})=><div key={label}><dt><Icon size={15}/>{label}</dt><dd>{href?<a href={href} className="hover:text-primary">{value}</a>:value||'Not provided'}</dd></div>)}<div><dt>Source</dt><dd className="capitalize">{lead.source==='meta'?'Meta Ads':lead.source==='seed'?'Sample data':lead.source}</dd></div><div><dt>Last updated</dt><dd>{dateTime(lead.updatedAt)}</dd></div></dl>{Object.keys(lead.metadata).length>0&&<details className="metadata-details"><summary>Additional information</summary><pre>{JSON.stringify(lead.metadata,null,2)}</pre></details>}</section><section className="panel"><div className="panel-heading"><div><h2>Activity timeline</h2><p>The complete story of this lead</p></div><span className="subtle-pill">All changes</span></div><ActivityList leadId={id}/></section></div></>;
+import { Link, useParams } from 'react-router-dom';
+import { useMutation, useQuery } from '@tanstack/react-query';
+import { ArrowLeft, Building2, Mail, Phone, Radio } from 'lucide-react';
+import { api, ApiError, json, queryClient } from '../lib/api';
+import { leadOptions, meOptions } from '../lib/queries';
+import { dateTime, initials } from '../lib/utils';
+import type { Lead } from '../lib/types';
+import { Select } from '../components/ui/input';
+import { ActivityList } from '../components/activity-list';
+import { Loading, ErrorState } from '../components/feedback';
+export default function LeadDetail() {
+  const { id = '' } = useParams(),
+    query = useQuery(leadOptions(id)),
+    { data: profile } = useQuery(meOptions);
+  const change = useMutation({
+    mutationFn: ({ statusId, expectedVersion }: { statusId: string; expectedVersion: number }) =>
+      api<Lead>('/leads/' + id + '/status', { method: 'PATCH', body: json({ statusId, expectedVersion }) }),
+    onMutate: async (input) => {
+      await queryClient.cancelQueries({ queryKey: ['lead', id] });
+      const previous = queryClient.getQueryData<Lead>(['lead', id]),
+        status = profile?.statuses.find((s) => s.id === input.statusId);
+      if (previous && status) queryClient.setQueryData(['lead', id], { ...previous, status });
+      return { previous };
+    },
+    onError: async (error, _input, context) => {
+      if (context?.previous) queryClient.setQueryData(['lead', id], context.previous);
+      if (error instanceof ApiError && error.status === 409)
+        await queryClient.invalidateQueries({ queryKey: ['lead', id] });
+    },
+    onSuccess: (lead) => {
+      queryClient.setQueryData(['lead', id], lead);
+      void queryClient.invalidateQueries({ queryKey: ['activities'] });
+      queryClient.invalidateQueries({ queryKey: ['leads'], refetchType: 'none' });
+    },
+  });
+  if (query.isPending) return <Loading />;
+  if (query.error) return <ErrorState error={query.error} retry={() => void query.refetch()} />;
+  const lead = query.data;
+  return (
+    <>
+      <Link
+        to="/leads"
+        className="mb-6 inline-flex items-center gap-2 text-xs text-muted-foreground hover:text-primary"
+      >
+        <ArrowLeft size={15} />
+        Back to leads
+      </Link>
+      <div className="page-heading">
+        <div className="flex items-center gap-4">
+          <span className="avatar detail-avatar">{initials(lead.fullName)}</span>
+          <div>
+            <span className="eyebrow">LEAD PROFILE</span>
+            <h1>{lead.fullName}</h1>
+            <p>Added {dateTime(lead.createdAt)}</p>
+          </div>
+        </div>
+        <label className="text-xs font-medium text-muted-foreground">
+          Current status
+          <Select
+            className="mt-2 block min-w-40"
+            aria-label="Lead status"
+            disabled={change.isPending}
+            value={lead.status.id}
+            onChange={(e) => change.mutate({ statusId: e.target.value, expectedVersion: lead.version })}
+          >
+            {profile?.statuses
+              .filter((status) => !status.archivedAt || status.id === lead.status.id)
+              .map((status) => (
+                <option key={status.id} value={status.id} disabled={!!status.archivedAt}>
+                  {status.name}
+                  {status.archivedAt ? ' (archived)' : ''}
+                </option>
+              ))}
+          </Select>
+        </label>
+      </div>
+      {change.error && (
+        <div className="mb-5">
+          <ErrorState error={change.error} />
+        </div>
+      )}
+      <div className="detail-grid">
+        <section className="panel self-start">
+          <div className="panel-heading">
+            <h2>Contact information</h2>
+          </div>
+          <dl className="contact-details">
+            {[
+              {
+                icon: Mail,
+                label: 'Email',
+                value: lead.email,
+                href: lead.email ? 'mailto:' + lead.email : undefined,
+              },
+              {
+                icon: Phone,
+                label: 'Phone',
+                value: lead.phone,
+                href: lead.phone ? 'tel:' + lead.phone : undefined,
+              },
+              { icon: Building2, label: 'Company', value: lead.company },
+              { icon: Radio, label: 'Campaign', value: lead.campaign },
+            ].map(({ icon: Icon, label, value, href }) => (
+              <div key={label}>
+                <dt>
+                  <Icon size={15} />
+                  {label}
+                </dt>
+                <dd>
+                  {href ? (
+                    <a href={href} className="hover:text-primary">
+                      {value}
+                    </a>
+                  ) : (
+                    value || 'Not provided'
+                  )}
+                </dd>
+              </div>
+            ))}
+            <div>
+              <dt>Source</dt>
+              <dd className="capitalize">
+                {lead.source === 'meta' ? 'Meta Ads' : lead.source === 'seed' ? 'Sample data' : lead.source}
+              </dd>
+            </div>
+            <div>
+              <dt>Last updated</dt>
+              <dd>{dateTime(lead.updatedAt)}</dd>
+            </div>
+          </dl>
+          {Object.keys(lead.metadata).length > 0 && (
+            <details className="metadata-details">
+              <summary>Additional information</summary>
+              <pre>{JSON.stringify(lead.metadata, null, 2)}</pre>
+            </details>
+          )}
+        </section>
+        <section className="panel">
+          <div className="panel-heading">
+            <div>
+              <h2>Activity timeline</h2>
+              <p>The complete story of this lead</p>
+            </div>
+            <span className="subtle-pill">All changes</span>
+          </div>
+          <ActivityList leadId={id} />
+        </section>
+      </div>
+    </>
+  );
 }

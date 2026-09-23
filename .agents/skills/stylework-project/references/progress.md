@@ -3,9 +3,9 @@
 - Inspected empty workspace and confirmed Node 24/npm 11/Git availability.
 - Recorded agreed architecture and 18-commit sequence.
 ## Current
-Milestone 15: build-activity-settings.
+Milestone 16: add-reliability-tests.
 ## Remaining
-15 build-activity-settings; 16 add-reliability-tests; 17 add-load-tests; 18 document-deployment.
+16 add-reliability-tests; 17 add-load-tests; 18 document-deployment.
 ## Verification
 - Docker daemon initially unavailable; restore local engine before integration tests.
 - No application existed before this implementation.
@@ -48,3 +48,6 @@ React shell, responsive navigation, semantic light/dark tokens, shadcn-style Rad
 
 ## build-lead-views
 Lazy lead list/detail routes, URL search/status/date/sort filters, cursor paging, TanStack virtualization with a 20-page retention limit and scroll anchors implemented. Detail has optimistic status changes with rollback/conflict reload and independent searchable activity timeline. Production build and component smoke passed. In-app browser discovery returned no browsers; Playwright verification follows with the complete UI.
+
+## build-activity-settings
+Global activity and status settings support reorder, rename, color, default selection and safe archival. Frontend formatted. Production build, component smoke and Chromium journey passed: sign-in, live dashboard, virtual paging, search, status update, activity dialog, status create/archive, persisted dark theme, mobile navigation and sign-out. Desktop light/dark and 390px mobile screenshots inspected. No browser errors or horizontal overflow. Approval review usage limit interrupted the milestone commit; resumed after user instruction.

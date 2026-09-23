@@ -1,12 +1,113 @@
-import {useLayoutEffect,useRef,type ReactNode} from 'react';
-import {useVirtualizer} from '@tanstack/react-virtual';
-import {Button} from './ui/button';
-interface Props<T>{rows:T[];rowHeight:number;renderRow:(row:T)=>ReactNode;hasNext:boolean;hasPrevious:boolean;fetching:boolean;next:()=>Promise<unknown>;previous:()=>Promise<unknown>;label:string;}
-export function VirtualList<T extends {id:string}>({rows,rowHeight,renderRow,hasNext,hasPrevious,fetching,next,previous,label}:Props<T>){
- const scroll=useRef<HTMLDivElement>(null),anchor=useRef<{id:string;offset:number}|null>(null),loading=useRef(false);
- const virtual=useVirtualizer({count:rows.length,getScrollElement:()=>scroll.current,estimateSize:()=>rowHeight,getItemKey:index=>rows[index].id,overscan:8});
- useLayoutEffect(()=>{if(anchor.current&&scroll.current){const index=rows.findIndex(row=>row.id===anchor.current!.id);if(index>=0)scroll.current.scrollTop=index*rowHeight+anchor.current.offset;anchor.current=null;}},[rows,rowHeight]);
- async function load(direction:'next'|'previous'){if(fetching||loading.current||!scroll.current)return;loading.current=true;const index=Math.min(rows.length-1,Math.floor(scroll.current.scrollTop/rowHeight));if(rows[index])anchor.current={id:rows[index].id,offset:scroll.current.scrollTop-index*rowHeight};try{await (direction==='next'?next():previous());}finally{loading.current=false;}}
- function onScroll(){const element=scroll.current;if(!element||fetching||loading.current)return;if(element.scrollTop<rowHeight*2&&hasPrevious)void load('previous');else if(element.scrollHeight-element.scrollTop-element.clientHeight<rowHeight*3&&hasNext)void load('next');}
- return <><div className="virtual-toolbar"><span>{rows.length.toLocaleString()} leads or events in this view</span>{hasPrevious&&<Button size="sm" variant="ghost" disabled={fetching} onClick={()=>void load('previous')}>Load previous</Button>}</div><div ref={scroll} className="virtual-scroll" onScroll={onScroll} tabIndex={0} role="region" aria-label={label} aria-busy={fetching}><div role="list" style={{height:virtual.getTotalSize(),position:'relative'}}>{virtual.getVirtualItems().map(item=><div key={item.key} role="listitem" data-index={item.index} style={{position:'absolute',top:0,left:0,width:'100%',height:rowHeight,transform:`translateY(${item.start}px)`}}>{renderRow(rows[item.index])}</div>)}</div></div><div className="list-footer">{hasNext?<Button variant="ghost" size="sm" disabled={fetching} onClick={()=>void load('next')}>{fetching?'Loading…':'Load more'}</Button>:<span>You’re all caught up.</span>}<span>Scroll to explore</span></div></>;
+import { useLayoutEffect, useRef, type ReactNode } from 'react';
+import { useVirtualizer } from '@tanstack/react-virtual';
+import { Button } from './ui/button';
+interface Props<T> {
+  rows: T[];
+  rowHeight: number;
+  renderRow: (row: T) => ReactNode;
+  hasNext: boolean;
+  hasPrevious: boolean;
+  fetching: boolean;
+  next: () => Promise<unknown>;
+  previous: () => Promise<unknown>;
+  label: string;
+}
+export function VirtualList<T extends { id: string }>({
+  rows,
+  rowHeight,
+  renderRow,
+  hasNext,
+  hasPrevious,
+  fetching,
+  next,
+  previous,
+  label,
+}: Props<T>) {
+  const scroll = useRef<HTMLDivElement>(null),
+    anchor = useRef<{ id: string; offset: number } | null>(null),
+    loading = useRef(false);
+  const virtual = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scroll.current,
+    estimateSize: () => rowHeight,
+    getItemKey: (index) => rows[index].id,
+    overscan: 8,
+  });
+  useLayoutEffect(() => {
+    if (anchor.current && scroll.current) {
+      const index = rows.findIndex((row) => row.id === anchor.current!.id);
+      if (index >= 0) scroll.current.scrollTop = index * rowHeight + anchor.current.offset;
+      anchor.current = null;
+    }
+  }, [rows, rowHeight]);
+  async function load(direction: 'next' | 'previous') {
+    if (fetching || loading.current || !scroll.current) return;
+    loading.current = true;
+    const index = Math.min(rows.length - 1, Math.floor(scroll.current.scrollTop / rowHeight));
+    if (rows[index])
+      anchor.current = { id: rows[index].id, offset: scroll.current.scrollTop - index * rowHeight };
+    try {
+      await (direction === 'next' ? next() : previous());
+    } finally {
+      loading.current = false;
+    }
+  }
+  function onScroll() {
+    const element = scroll.current;
+    if (!element || fetching || loading.current) return;
+    if (element.scrollTop < rowHeight * 2 && hasPrevious) void load('previous');
+    else if (element.scrollHeight - element.scrollTop - element.clientHeight < rowHeight * 3 && hasNext)
+      void load('next');
+  }
+  return (
+    <>
+      <div className="virtual-toolbar">
+        <span>{rows.length.toLocaleString()} leads or events in this view</span>
+        {hasPrevious && (
+          <Button size="sm" variant="ghost" disabled={fetching} onClick={() => void load('previous')}>
+            Load previous
+          </Button>
+        )}
+      </div>
+      <div
+        ref={scroll}
+        className="virtual-scroll"
+        onScroll={onScroll}
+        tabIndex={0}
+        role="region"
+        aria-label={label}
+        aria-busy={fetching}
+      >
+        <div role="list" style={{ height: virtual.getTotalSize(), position: 'relative' }}>
+          {virtual.getVirtualItems().map((item) => (
+            <div
+              key={item.key}
+              role="listitem"
+              data-index={item.index}
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: 0,
+                width: '100%',
+                height: rowHeight,
+                transform: `translateY(${item.start}px)`,
+              }}
+            >
+              {renderRow(rows[item.index])}
+            </div>
+          ))}
+        </div>
+      </div>
+      <div className="list-footer">
+        {hasNext ? (
+          <Button variant="ghost" size="sm" disabled={fetching} onClick={() => void load('next')}>
+            {fetching ? 'Loading…' : 'Load more'}
+          </Button>
+        ) : (
+          <span>You’re all caught up.</span>
+        )}
+        <span>Scroll to explore</span>
+      </div>
+    </>
+  );
 }
