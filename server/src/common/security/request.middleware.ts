@@ -14,6 +14,7 @@ import { RuntimeState } from './runtime-state';
 import { Telemetry } from './telemetry.service';
 @Injectable()
 export class RequestMiddleware {
+  private inflight = 0;
   private readonly origins = new Set(config.CLIENT_ORIGINS.split(',').map((v) => new URL(v.trim()).origin));
   constructor(
     private readonly limiter: RateLimiter,
@@ -48,6 +49,24 @@ export class RequestMiddleware {
       const origin = req.headers.origin;
       if (origin && !this.origins.has(origin)) throw new ForbiddenException('Origin is not allowed');
       if (req.method === 'OPTIONS') return next();
+      // Bound queued database work as well as arrival rate. SSE has its own distributed cap.
+      if (req.path !== '/dashboard/stream') {
+        if (this.inflight >= config.MAX_INFLIGHT_REQUESTS)
+          throw new ServiceUnavailableException({
+            code: 'SERVER_BUSY',
+            message: 'Server is busy; retry shortly',
+          });
+        this.inflight++;
+        let released = false;
+        const release = () => {
+          if (!released) {
+            released = true;
+            this.inflight--;
+          }
+        };
+        res.once('finish', release);
+        res.once('close', release);
+      }
       if (req.path === '/graphql' && req.method !== 'POST')
         throw new HttpException('GraphQL requires POST', 405);
       if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method) && !req.is('application/json'))
@@ -76,12 +95,10 @@ export class RequestMiddleware {
           ? (detail as any)
           : { message: typeof detail === 'string' ? detail : 'Service temporarily unavailable' };
       if (status === 503) res.setHeader('Retry-After', '2');
-      res
-        .status(status)
-        .json({
-          error: { code: body.code || 'REQUEST_REJECTED', message: body.message },
-          meta: { requestId: req.requestId },
-        });
+      res.status(status).json({
+        error: { code: body.code || 'REQUEST_REJECTED', message: body.message },
+        meta: { requestId: req.requestId },
+      });
     }
   };
 }

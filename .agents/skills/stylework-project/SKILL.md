@@ -18,3 +18,4 @@ Read [progress](references/progress.md) to resume work and [architecture](../../
 - Maintain the agreed 18 meaningful commits; feature tests belong with their features.
 - Seeders must not reset existing data. Integration tests use an isolated database.
 - Record measured checks honestly, including blocked infrastructure and unverified load targets.
+- Latest user correction: seed only 12 users, 150 leads and 75 additional activities (plus creation audits). Do not generate large datasets or run large load tests. Millions of requests is an architectural goal, not authorization for a million-row benchmark.

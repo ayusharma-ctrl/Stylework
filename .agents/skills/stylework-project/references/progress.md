@@ -3,11 +3,11 @@
 - Inspected empty workspace and confirmed Node 24/npm 11/Git availability.
 - Recorded agreed architecture and 18-commit sequence.
 ## Current
-Milestone 17: add-load-tests.
+Milestone 18: document-deployment. Small-data scope correction is complete.
 ## Remaining
-17 add-load-tests; 18 document-deployment.
+18 document-deployment: final Docker smoke/browser checks and documentation.
 ## Verification
-- Docker daemon initially unavailable; restore local engine before integration tests.
+- Docker restored; both images and the complete stack verified healthy.
 - No application existed before this implementation.
 
 ## server-setup
@@ -54,3 +54,9 @@ Global activity and status settings support reorder, rename, color, default sele
 
 ## add-reliability-tests
 23 backend unit checks, 20 real PostgreSQL/Redis integration scenarios, 5 frontend checks and the browser journey pass. Isolated databases are created/dropped by the integration runner; Redis DB 15 is reserved for tests. Verified rollback fault injection, duplicate/redelivered events, version ordering, concurrent registration/renewal/status edits, append-only audit, origin/body/query limits, shared limiter failure, SSE revocation and Redis-loss receipt reconciliation. Corrected retry accounting under concurrent redelivery. Dependency audit reports zero vulnerabilities after compatible fixes and a tested Sequelize UUID override. Both Docker images build; full Compose startup and end-to-end smoke are next. CI covers backend, frontend and Compose browser journey.
+
+## Scope correction and cleanup
+User explicitly stopped million-row generation and large load testing. Final sample: 12 users, 150 leads, 75 extra activities plus 150 creation audits. Temporary stylework_benchmark PostgreSQL database and dedicated Redis DB 14 removed; large benchmark source/results removed. Previously generated seed rows in the local app were replaced with the small dataset; unrelated records preserved. A one-time local maintenance transaction restored the immutable-audit trigger before commit. Counts verified as 12/150/150/75. The old experiment missed latency targets; do not claim million-request capacity. It exposed GraphQL quota classification and parallel-field quota bypass issues, now fixed and covered by a passing 21-scenario integration suite. Per-instance admission now bounds in-flight work at 32. Final small seeder regression and documentation checks remain.
+
+## limit-demo-seeds
+Demo defaults are 12 users, 150 leads and 75 additional status activities, with 150 creation audits. Seed input is capped at 200 leads. A real database regression verifies relationships, counts, the cap and additive reruns. Backend build, 23 unit checks and all 22 PostgreSQL/Redis integration scenarios pass. GraphQL now shares one asynchronous quota decision across root fields and correctly charges the read bucket. In-flight admission is bounded and documented in environment settings. No further large-data tests ran.

@@ -8,6 +8,7 @@ import { bootstrap } from '../src/main';
 import { config } from '../src/config/config';
 import { createDatabase, DatabaseService } from '../src/database/database.service';
 import { migrate } from '../src/database/migrator';
+import { seedDemo } from '../src/database/seeders/demo';
 import {
   Activity,
   Lead,
@@ -29,6 +30,7 @@ import { RateLimiter } from '../src/common/security/rate-limiter.service';
 import { WebhookCredentialsService } from '../src/modules/webhooks/webhook-credentials.service';
 import { DashboardService } from '../src/modules/dashboard/dashboard.service';
 import { AuthService } from '../src/modules/auth/auth.service';
+import { hash } from '../src/common/crypto';
 let app: NestExpressApplication,
   db: DatabaseService,
   processor: LeadProcessor,
@@ -315,6 +317,27 @@ describe('durability, ordering and retries', () => {
   });
 });
 describe('queries, configuration and live views', () => {
+  test('GraphQL uses one shared read quota decision for all root fields', async () => {
+    const signed = await app.get(AuthService).signin('query-quota@example.test');
+    const requestHeaders = {
+      Authorization: 'Bearer ' + signed.tokens.accessToken,
+      'X-Refresh-Token': signed.tokens.refreshToken,
+    };
+    const query = '{a:leads(input:{first:1}){nodes{id}} b:leads(input:{first:1}){nodes{id}}}';
+    const result = await request(app.getHttpServer()).post('/graphql').set(requestHeaders).send({ query });
+    expect(result.body.errors).toBeUndefined();
+    const key = 'sw:rate:read-user:' + hash(signed.user.id);
+    expect(Number(await redis.client.hget(key, 'tokens'))).toBeGreaterThan(config.READ_USER_LIMIT - 2);
+    expect(await redis.client.exists('sw:rate:write-user:' + hash(signed.user.id))).toBe(0);
+    const now = await redis.client.time();
+    await redis.client.hset(key, {
+      tokens: -100,
+      time: Number(now[0]) * 1000 + Math.floor(Number(now[1]) / 1000),
+    });
+    const denied = await request(app.getHttpServer()).post('/graphql').set(requestHeaders).send({ query });
+    expect(denied.body.errors).toBeTruthy();
+    expect(denied.body.data).toBeNull();
+  });
   test('REST/GraphQL parity, bidirectional pagination and cursor binding', async () => {
     const query =
       'query($input:LeadQueryInput){leads(input:$input){nodes{id fullName}pageInfo{startCursor endCursor hasNextPage hasPreviousPage}}}';
@@ -455,4 +478,17 @@ describe('queries, configuration and live views', () => {
       await jobs.stop();
     }
   });
+});
+
+test('small demo seeder is bounded, related and repeatable', async () => {
+  await expect(seedDemo(db.sequelize, 201)).rejects.toThrow('1..200');
+  await seedDemo(db.sequelize);
+  expect(await Lead.count({ where: { source: 'seed' } })).toBe(150);
+  const [counts] = await db.sequelize.query<{ created: string; changed: string }>(
+    "SELECT count(*) FILTER(WHERE a.type='LEAD_CREATED')::text AS created,count(*) FILTER(WHERE a.type='STATUS_CHANGED')::text AS changed FROM activities a JOIN leads l ON l.id=a.lead_id WHERE l.source='seed'",
+    { type: QueryTypes.SELECT },
+  );
+  expect(counts).toEqual({ created: '150', changed: '75' });
+  await seedDemo(db.sequelize);
+  expect(await Lead.count({ where: { source: 'seed' } })).toBe(150);
 });

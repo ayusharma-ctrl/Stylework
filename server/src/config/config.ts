@@ -15,6 +15,7 @@ const schema = z.object({
   DB_POOL_MAX: z.coerce.number().int().min(1).max(50).default(10),
   WORKER_CONCURRENCY: z.coerce.number().int().min(1).max(100).default(10),
   MAX_PENDING_EVENTS: z.coerce.number().int().positive().default(100000),
+  MAX_INFLIGHT_REQUESTS: z.coerce.number().int().min(4).max(1000).default(32),
   SIGNIN_IP_LIMIT: z.coerce.number().int().positive().default(5),
   SIGNIN_EMAIL_LIMIT: z.coerce.number().int().positive().default(5),
   READ_USER_LIMIT: z.coerce.number().int().positive().default(300),

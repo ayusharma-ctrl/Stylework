@@ -9,4 +9,5 @@ export interface ApiRequest extends Request {
   requestId: string;
   rawBody?: Buffer;
   webhookCredentialId?: string;
+  rateCheck?: Promise<boolean>;
 }

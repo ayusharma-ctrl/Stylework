@@ -1,6 +1,6 @@
 # Architecture decisions
 ## Scope
-One shared workspace. All signed-in users can manage statuses. Signed, manually called webhook; no Meta API integration. Users edit status only. Delivery is local Docker plus Vercel/Render/Neon deployment configuration; the owner publishes live services.
+One shared workspace. All signed-in users can manage statuses. Database-key-authenticated, manually called webhook; no Meta API integration. Users edit status only. Delivery is local Docker plus Vercel/Render/Neon deployment configuration; the owner publishes live services.
 
 ## Runtime
 Independent React/Vite app and NestJS/Express TypeScript server. One modular server codebase, separate API and worker entrypoints. PostgreSQL via Sequelize models, explicit migrations and seeders. Redis handles BullMQ, rate limits, and notifications. No shared package.
@@ -21,6 +21,6 @@ Stable status IDs with soft archival; archival of default requires replacement. 
 React + Tailwind semantic variables + shadcn, light/dark, responsive UI, virtualized cursor lists, TanStack Query and Zustand preferences. Status only editing.
 
 ## Delivery and validation
-18 milestones: project-plan, server-setup, app-setup, setup-docker, setup-database, setup-auth, harden-api, setup-webhook, process-webhook-events, setup-leads-api, setup-statuses, setup-dashboard-stream, build-app-shell, build-lead-views, build-activity-settings, add-reliability-tests, add-load-tests, document-deployment.
+18 milestones: project-plan, server-setup, app-setup, setup-docker, setup-database, setup-auth, harden-api, setup-webhook, process-webhook-events, setup-leads-api, setup-statuses, setup-dashboard-stream, build-app-shell, build-lead-views, build-activity-settings, add-reliability-tests, limit-demo-seeds, document-deployment.
 Tests cover real PostgreSQL/Redis, duplicates, ordering, rollback, renewal, recovery, status races, pagination, SSE, browser flows, and production builds.
-Targets: 1M events/day; burst 500/sec for 60 seconds with 1M seeded leads. ACK p95 <250ms, reads p95 <500ms, healthy SSE freshness <2s. These are targets, not claims.
+Revised data scope: 12 synthetic users, 150 leads and 75 additional activities, plus each lead's creation audit. User explicitly removed large-data generation and load testing from execution scope. Millions of requests remains an architectural capacity goal, not a measured guarantee. No further large benchmarks should run without explicit authorization.
