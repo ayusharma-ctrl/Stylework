@@ -24,3 +24,6 @@ Sequelize build, initial migration, and 12,000-lead relational seeder passed aga
 
 ## setup-auth
 Nest 11 compatibility line selected after an ESM/Jest failure on Nest 12. Build, token validation tests, and live sign-in/profile/sign-out/revocation smoke passed.
+
+## harden-api
+Build, 11 unit checks, and authenticated HTTP smoke passed with Redis-backed limiting, tracing, origin checks, response envelopes, and health checks active.
