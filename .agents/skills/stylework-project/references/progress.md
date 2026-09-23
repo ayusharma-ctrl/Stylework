@@ -15,3 +15,6 @@ Backend dependencies installed; TypeScript build and 3 configuration tests passe
 
 ## app-setup
 Independent Vite production build and component smoke test passed.
+
+## setup-docker
+Compose configuration valid; dedicated PostgreSQL and Redis containers started. Full images will be tested once worker and migration entrypoints exist.
