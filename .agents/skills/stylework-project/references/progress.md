@@ -21,3 +21,6 @@ Compose configuration valid; dedicated PostgreSQL and Redis containers started. 
 
 ## setup-database
 Sequelize build, initial migration, and 12,000-lead relational seeder passed against local PostgreSQL. Immutable audit trigger and indexed schema installed.
+
+## setup-auth
+Nest 11 compatibility line selected after an ESM/Jest failure on Nest 12. Build, token validation tests, and live sign-in/profile/sign-out/revocation smoke passed.
