@@ -24,11 +24,9 @@ export class RequestMiddleware {
   use = async (req: ApiRequest, res: Response, next: NextFunction) => {
     req.requestId = randomUUID();
     res.setHeader('X-Request-ID', req.requestId);
-    const started = performance.now(),
-      path = req.path;
+    const started = performance.now();
     res.once('finish', () => {
-      const route =
-        path === '/graphql' ? '/graphql' : typeof req.route?.path === 'string' ? req.route.path : 'unmatched';
+      const route = typeof req.route?.path === 'string' ? req.route.path : 'unmatched';
       this.telemetry.requests.inc({ method: req.method, route, status: String(res.statusCode) });
       this.telemetry.duration.observe({ method: req.method, route }, (performance.now() - started) / 1000);
       if (!req.path.startsWith('/health'))
@@ -67,17 +65,15 @@ export class RequestMiddleware {
         res.once('finish', release);
         res.once('close', release);
       }
-      if (req.path === '/graphql' && req.method !== 'POST')
-        throw new HttpException('GraphQL requires POST', 405);
       if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method) && !req.is('application/json'))
         throw new UnsupportedMediaTypeException('Content-Type must be application/json');
       const ip = req.ip || req.socket.remoteAddress || 'unknown';
       if (req.path === '/signin')
         await this.limiter.consume('signin-ip', ip, config.SIGNIN_IP_LIMIT, 60000, res);
-      else if (req.path === '/webhook/meta-lead')
+      else if (req.path === '/webhook/meta-lead' && req.headers['x-webhook-key'] !== undefined)
         await this.limiter.consume('webhook-ip', ip, config.WEBHOOK_IP_RATE, 1000, res);
       else if (req.path != '/metrics') {
-        const read = req.method === 'GET' || req.path === '/graphql';
+        const read = req.method === 'GET';
         await this.limiter.consume(
           read ? 'read-ip' : 'write-ip',
           ip,

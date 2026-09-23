@@ -4,6 +4,7 @@ COPY package*.json ./
 RUN npm ci --no-audit --no-fund
 COPY tsconfig*.json ./
 COPY src ./src
+COPY scripts/clean-build.cjs ./scripts/clean-build.cjs
 RUN npm run build
 FROM node:24-bookworm-slim AS runtime
 ENV NODE_ENV=production

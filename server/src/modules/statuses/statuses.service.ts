@@ -1,7 +1,7 @@
 import { ConflictException, Injectable } from '@nestjs/common';
 import { Transaction } from 'sequelize';
 import { DatabaseService } from '../../database/database.service';
-import { Status, Workspace } from '../../database/models';
+import { Status, AppSettings } from '../../database/models';
 import { Principal } from '../../common/http.types';
 import { AuditService } from '../events/audit.service';
 import { OutboxService } from '../events/outbox.service';
@@ -16,8 +16,8 @@ export class StatusesService {
     private readonly outbox: OutboxService,
   ) {}
   async list() {
-    const [statuses, workspace] = await Promise.all([this.repository.list(), Workspace.findByPk(1)]);
-    return { statuses: statuses.map((s) => s.toJSON()), workspace: workspace!.toJSON() };
+    const [statuses, settings] = await Promise.all([this.repository.list(), AppSettings.findByPk(1)]);
+    return { statuses: statuses.map((s) => s.toJSON()), settings: settings!.toJSON() };
   }
   private version(status: Status, expected: number) {
     if (status.version !== expected)
@@ -28,14 +28,14 @@ export class StatusesService {
   }
   private async changed(
     transaction: Transaction,
-    workspace: Workspace,
+    settings: AppSettings,
     status: Status,
     type: string,
     before: Record<string, unknown> | undefined,
     principal: Principal,
     requestId: string,
   ) {
-    await workspace.update({ catalogVersion: workspace.catalogVersion + 1 }, { transaction });
+    await settings.update({ catalogVersion: settings.catalogVersion + 1 }, { transaction });
     await this.audit.record(transaction, {
       entityId: status.id,
       entityType: 'status',
@@ -51,31 +51,31 @@ export class StatusesService {
       before,
       after: {
         ...status.toJSON(),
-        isDefault: workspace.defaultStatusId === status.id,
-        defaultStatusId: workspace.defaultStatusId,
+        isDefault: settings.defaultStatusId === status.id,
+        defaultStatusId: settings.defaultStatusId,
       },
       requestId,
     });
     await this.outbox.notify(transaction, {
       kind: 'catalog',
-      catalogVersion: workspace.catalogVersion,
+      catalogVersion: settings.catalogVersion,
       requestId,
     });
   }
   create(input: CreateStatus, principal: Principal, requestId: string) {
     return this.db.sequelize.transaction(async (transaction) => {
-      const workspace = await this.repository.lockWorkspace(transaction);
+      const settings = await this.repository.lockSettings(transaction);
       if ((await Status.count({ where: { archivedAt: null }, transaction })) >= 100)
-        throw new ConflictException('A workspace supports up to 100 active statuses');
+        throw new ConflictException('The application supports up to 100 active statuses');
       const position = input.position ?? Number((await Status.max('position', { transaction })) || 0) + 1;
       const status = await Status.create({ ...input, position, version: 1 }, { transaction });
-      await this.changed(transaction, workspace, status, 'STATUS_CREATED', undefined, principal, requestId);
+      await this.changed(transaction, settings, status, 'STATUS_CREATED', undefined, principal, requestId);
       return status.toJSON();
     });
   }
   reorder(input: ReorderStatuses, principal: Principal, requestId: string) {
     return this.db.sequelize.transaction(async (transaction) => {
-      const workspace = await this.repository.lockWorkspace(transaction);
+      const settings = await this.repository.lockSettings(transaction);
       const statuses = await Status.findAll({
         where: { archivedAt: null },
         transaction,
@@ -98,31 +98,31 @@ export class StatusesService {
         if (status.position === position) continue;
         const before = status.toJSON();
         await status.update({ position, version: status.version + 1 }, { transaction });
-        await this.changed(transaction, workspace, status, 'STATUS_UPDATED', before, principal, requestId);
+        await this.changed(transaction, settings, status, 'STATUS_UPDATED', before, principal, requestId);
       }
       return statuses.sort((a, b) => a.position - b.position).map((status) => status.toJSON());
     });
   }
   update(id: string, input: UpdateStatus, principal: Principal, requestId: string) {
     return this.db.sequelize.transaction(async (transaction) => {
-      const workspace = await this.repository.lockWorkspace(transaction),
+      const settings = await this.repository.lockSettings(transaction),
         status = await this.repository.lock(id, transaction);
       this.version(status, input.expectedVersion);
       if (status.archivedAt) throw new ConflictException('Archived statuses cannot be changed');
       const before = {
         ...status.toJSON(),
-        isDefault: workspace.defaultStatusId === status.id,
-        defaultStatusId: workspace.defaultStatusId,
+        isDefault: settings.defaultStatusId === status.id,
+        defaultStatusId: settings.defaultStatusId,
       };
       const { expectedVersion, isDefault, ...changes } = input;
       const changed = Object.entries(changes).some(([key, value]) => status.get(key) !== value);
-      const newDefault = isDefault && workspace.defaultStatusId !== id;
+      const newDefault = isDefault && settings.defaultStatusId !== id;
       if (!changed && !newDefault) return status.toJSON();
       await status.update({ ...changes, version: status.version + 1 }, { transaction });
-      if (newDefault) await workspace.update({ defaultStatusId: id }, { transaction });
+      if (newDefault) await settings.update({ defaultStatusId: id }, { transaction });
       await this.changed(
         transaction,
-        workspace,
+        settings,
         status,
         newDefault ? 'DEFAULT_STATUS_CHANGED' : 'STATUS_UPDATED',
         before,
@@ -134,16 +134,16 @@ export class StatusesService {
   }
   archive(id: string, input: ArchiveStatus, principal: Principal, requestId: string) {
     return this.db.sequelize.transaction(async (transaction) => {
-      const workspace = await this.repository.lockWorkspace(transaction),
+      const settings = await this.repository.lockSettings(transaction),
         status = await this.repository.lock(id, transaction);
       this.version(status, input.expectedVersion);
       if (status.archivedAt) return status.toJSON();
       const before = {
         ...status.toJSON(),
-        isDefault: workspace.defaultStatusId === id,
-        defaultStatusId: workspace.defaultStatusId,
+        isDefault: settings.defaultStatusId === id,
+        defaultStatusId: settings.defaultStatusId,
       };
-      if (workspace.defaultStatusId === id) {
+      if (settings.defaultStatusId === id) {
         if (!input.replacementStatusId || input.replacementStatusId === id)
           throw new ConflictException({
             code: 'DEFAULT_REPLACEMENT_REQUIRED',
@@ -151,10 +151,10 @@ export class StatusesService {
           });
         const replacement = await this.repository.lock(input.replacementStatusId, transaction);
         if (replacement.archivedAt) throw new ConflictException('Replacement status is archived');
-        await workspace.update({ defaultStatusId: replacement.id }, { transaction });
+        await settings.update({ defaultStatusId: replacement.id }, { transaction });
       }
       await status.update({ archivedAt: new Date(), version: status.version + 1 }, { transaction });
-      await this.changed(transaction, workspace, status, 'STATUS_ARCHIVED', before, principal, requestId);
+      await this.changed(transaction, settings, status, 'STATUS_ARCHIVED', before, principal, requestId);
       return status.toJSON();
     });
   }

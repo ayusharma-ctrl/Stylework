@@ -9,16 +9,7 @@ import { config } from '../src/config/config';
 import { createDatabase, DatabaseService } from '../src/database/database.service';
 import { migrate } from '../src/database/migrator';
 import { seedDemo } from '../src/database/seeders/demo';
-import {
-  Activity,
-  Lead,
-  Outbox,
-  Receipt,
-  Session,
-  User,
-  WebhookCredential,
-  Workspace,
-} from '../src/database/models';
+import { Activity, Lead, Outbox, Receipt, Session, User, WebhookCredential } from '../src/database/models';
 import { AuditService } from '../src/modules/events/audit.service';
 import { CountersService } from '../src/modules/events/counters.service';
 import { OutboxService } from '../src/modules/events/outbox.service';
@@ -317,15 +308,13 @@ describe('durability, ordering and retries', () => {
   });
 });
 describe('queries, configuration and live views', () => {
-  test('GraphQL uses one shared read quota decision for all root fields', async () => {
+  test('REST reads use read quotas and reject exhausted buckets', async () => {
     const signed = await app.get(AuthService).signin('query-quota@example.test');
     const requestHeaders = {
       Authorization: 'Bearer ' + signed.tokens.accessToken,
       'X-Refresh-Token': signed.tokens.refreshToken,
     };
-    const query = '{a:leads(input:{first:1}){nodes{id}} b:leads(input:{first:1}){nodes{id}}}';
-    const result = await request(app.getHttpServer()).post('/graphql').set(requestHeaders).send({ query });
-    expect(result.body.errors).toBeUndefined();
+    expect((await request(app.getHttpServer()).get('/leads?first=1').set(requestHeaders)).status).toBe(200);
     const key = 'sw:rate:read-user:' + hash(signed.user.id);
     expect(Number(await redis.client.hget(key, 'tokens'))).toBeGreaterThan(config.READ_USER_LIMIT - 2);
     expect(await redis.client.exists('sw:rate:write-user:' + hash(signed.user.id))).toBe(0);
@@ -334,45 +323,134 @@ describe('queries, configuration and live views', () => {
       tokens: -100,
       time: Number(now[0]) * 1000 + Math.floor(Number(now[1]) / 1000),
     });
-    const denied = await request(app.getHttpServer()).post('/graphql').set(requestHeaders).send({ query });
-    expect(denied.body.errors).toBeTruthy();
-    expect(denied.body.data).toBeNull();
+    expect((await request(app.getHttpServer()).get('/activities').set(requestHeaders)).status).toBe(429);
   });
-  test('REST/GraphQL parity, bidirectional pagination and cursor binding', async () => {
-    const query =
-      'query($input:LeadQueryInput){leads(input:$input){nodes{id fullName}pageInfo{startCursor endCursor hasNextPage hasPreviousPage}}}';
-    const gql = (input: any) =>
-      request(app.getHttpServer()).post('/graphql').set(headers()).send({ query, variables: { input } });
-    const first = await gql({ first: 2 }),
-      second = await gql({ first: 2, after: first.body.data.leads.pageInfo.endCursor }),
-      back = await gql({ last: 2, before: second.body.data.leads.pageInfo.startCursor });
-    expect(back.body.data.leads.nodes).toEqual(first.body.data.leads.nodes);
-    const rest = await request(app.getHttpServer()).get('/leads?first=2').set(headers());
-    expect(rest.body.data.nodes.map((r: any) => r.id)).toEqual(
-      first.body.data.leads.nodes.map((r: any) => r.id),
+  test('REST bidirectional paging, filters, sort and schema bounds', async () => {
+    const get = (path: string, input: any = {}) =>
+      request(app.getHttpServer()).get(path).query(input).set(headers());
+    const first = await get('/leads', { first: 2 }),
+      second = await get('/leads', { first: 2, after: first.body.data.pageInfo.endCursor }),
+      back = await get('/leads', { last: 2, before: second.body.data.pageInfo.startCursor });
+    expect(back.body.data.nodes).toEqual(first.body.data.nodes);
+    expect((await get('/leads', { after: first.body.data.pageInfo.endCursor, search: 'other' })).status).toBe(
+      400,
+    );
+    for (const input of [
+      { first: 101 },
+      { sort: 'arbitrary' },
+      { direction: 'bad' },
+      { first: 2, last: 2 },
+      { unknown: 'field' },
+    ])
+      expect((await get('/leads', input)).status).toBe(400);
+    expect((await get('/activities', { types: 'LEAD_CREATED,STATUS_CHANGED' })).status).toBe(200);
+    expect((await get('/activities', { types: 'BAD' })).status).toBe(400);
+    expect((await request(app.getHttpServer()).get('/activities')).status).toBe(401);
+    expect((await request(app.getHttpServer()).post('/graphql').set(headers()).send({})).status).toBe(404);
+    const sorted = await get('/leads', { sort: 'NAME', direction: 'ASC', search: 'Integration' });
+    expect(sorted.body.data.nodes.length).toBeGreaterThan(0);
+  });
+  test('lead and activity date ranges include start and exclude end', async () => {
+    const payload = event({ data: { fullName: 'Date range ' + randomUUID(), email: 'range@example.test' } }),
+      receipt = await intake(payload);
+    await processor.process(receipt.id);
+    await receipt.reload();
+    const lead = (await Lead.findByPk(receipt.leadId!))!,
+      activity = (await Activity.findOne({ where: { leadId: lead.id } }))!;
+    for (const [route, filter, row] of [
+      ['/leads', { search: lead.fullName }, lead],
+      ['/activities', { leadId: lead.id }, activity],
+    ] as const) {
+      const at = row.createdAt.getTime();
+      const get = (createdFrom: string, createdTo: string) =>
+        request(app.getHttpServer())
+          .get(route)
+          .query({ ...filter, createdFrom, createdTo })
+          .set(headers());
+      const result = await get(new Date(at).toISOString(), new Date(at + 1).toISOString());
+      expect(result.status).toBe(200);
+      expect(result.body.data.nodes.map((n: any) => n.id)).toContain(row.id);
+      const excluded = await get(new Date(at - 1).toISOString(), new Date(at).toISOString());
+      expect(excluded.status).toBe(200);
+      expect(excluded.body.data.nodes.map((n: any) => n.id)).not.toContain(row.id);
+      expect((await get(new Date(at + 1).toISOString(), new Date(at).toISOString())).status).toBe(400);
+      expect((await get('not-a-date', new Date(at).toISOString())).status).toBe(400);
+    }
+  });
+  test('manual intake uses session auth, durable receipts and user audit attribution', async () => {
+    const payload = event();
+    const send = (data: any = payload) =>
+      request(app.getHttpServer()).post('/webhook/meta-lead').set(headers()).send(data);
+    expect((await request(app.getHttpServer()).post('/webhook/meta-lead').send(payload)).status).toBe(401);
+    expect(
+      (
+        await request(app.getHttpServer())
+          .post('/webhook/meta-lead')
+          .set(headers())
+          .set('X-Webhook-Key', 'invalid')
+          .send(payload)
+      ).status,
+    ).toBe(401);
+    expect((await send({ ...payload, version: 2 })).status).toBe(400);
+    const accepted = await send();
+    expect(accepted.status).toBe(202);
+    expect(accepted.body.data.source).toBe('manual');
+    expect((await send()).status).toBe(200);
+    await processor.process(accepted.body.data.receiptId);
+    await processor.process(accepted.body.data.receiptId);
+    const result = await request(app.getHttpServer())
+      .get('/webhook-events/' + payload.eventId + '?source=manual')
+      .set(headers());
+    expect(result.body.data.state).toBe('processed');
+    const lead = (await Lead.findByPk(result.body.data.leadId))!;
+    expect(lead.source).toBe('manual');
+    const audit = await Activity.findAll({ where: { leadId: lead.id } });
+    expect(audit).toHaveLength(1);
+    expect(audit[0]!.actorId).toBe(profile.user.id);
+    expect(audit[0]!.actor.kind).toBe('user');
+    // Identical external IDs from independent sources cannot overwrite one another.
+    const external = await intake(payload);
+    await processor.process(external.id);
+    expect(await Lead.count({ where: { externalId: payload.externalLeadId } })).toBe(2);
+  });
+  test('manual intake shares mutation quotas and rejects compressed requests', async () => {
+    const signed = await app.get(AuthService).signin('manual-quota@example.test');
+    const h = {
+      Authorization: 'Bearer ' + signed.tokens.accessToken,
+      'X-Refresh-Token': signed.tokens.refreshToken,
+    };
+    const now = await redis.client.time();
+    await redis.client.hset('sw:rate:write-user:' + hash(signed.user.id), {
+      tokens: -100,
+      time: Number(now[0]) * 1000 + Math.floor(Number(now[1]) / 1000),
+    });
+    expect((await request(app.getHttpServer()).post('/webhook/meta-lead').set(h).send(event())).status).toBe(
+      429,
     );
     expect(
-      (await gql({ first: 2, search: 'other', after: first.body.data.leads.pageInfo.endCursor })).body.errors,
-    ).toBeTruthy();
-    expect((await gql({ first: 101 })).body.errors).toBeTruthy();
+      (
+        await request(app.getHttpServer())
+          .post('/signin')
+          .set('Content-Encoding', 'gzip')
+          .send({ email: 'no@example.test' })
+      ).status,
+    ).toBe(415);
   });
-  test('GraphQL rejects batches, multiple operations, aliases, complexity and unauthenticated reads', async () => {
-    const post = (body: any) => request(app.getHttpServer()).post('/graphql').set(headers()).send(body);
-    for (const query of [
-      'query A {leads{nodes{id}}} query B {leads{nodes{id}}}',
-      '{' +
-        Array.from({ length: 21 }, (_, i) => 'a' + i + ':leads(input:{first:1}){nodes{id}}').join(' ') +
-        '}',
-      '{leads(input:{first:100}){nodes{id fullName metadata}}}',
-    ]) {
-      const response = await post({ query });
-      expect(response.status).toBe(400);
-      expect(response.body.errors).toBeTruthy();
+  test('API negotiates compression and keeps credential responses uncompressed', async () => {
+    for (const encoding of ['gzip', 'br']) {
+      const response = await request(app.getHttpServer())
+        .get('/leads?first=100')
+        .set(headers())
+        .set('Accept-Encoding', encoding);
+      expect(response.status).toBe(200);
+      expect(response.headers['content-encoding']).toBe(encoding);
+      expect(response.headers.vary).toContain('Accept-Encoding');
     }
-    expect((await post([{ query: '{leads{nodes{id}}}' }])).status).toBe(400);
-    expect(
-      (await request(app.getHttpServer()).post('/graphql').send({ query: '{leads{nodes{id}}}' })).body.errors,
-    ).toBeTruthy();
+    const response = await request(app.getHttpServer())
+      .post('/signin')
+      .set('Accept-Encoding', 'gzip')
+      .send({ email: 'compression@example.test' });
+    expect(response.headers['content-encoding']).toBeUndefined();
   });
   test('simultaneous status updates reject stale version and archive preserves history', async () => {
     const created = await request(app.getHttpServer())
@@ -409,7 +487,7 @@ describe('queries, configuration and live views', () => {
         await request(app.getHttpServer())
           .delete('/statuses/' + status.id)
           .set(headers())
-          .send({ expectedVersion: 2, replacementStatusId: profile.workspace.defaultStatusId })
+          .send({ expectedVersion: 2, replacementStatusId: profile.settings.defaultStatusId })
       ).status,
     ).toBe(200);
     await lead.reload();
@@ -433,6 +511,7 @@ describe('queries, configuration and live views', () => {
         signal: abort.signal,
       });
       expect(response.status).toBe(200);
+      expect(response.headers.get('content-encoding')).toBeNull();
       const reader = response.body!.getReader(),
         chunk = await reader.read(),
         text = new TextDecoder().decode(chunk.value);

@@ -1,14 +1,11 @@
 import { CanActivate, ExecutionContext, Injectable, UnauthorizedException } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
-import { GqlExecutionContext } from '@nestjs/graphql';
 import { Response } from 'express';
 import { ApiRequest } from '../../common/http.types';
 import { PUBLIC_ROUTE } from '../../common/public.decorator';
 import { AuthService } from './auth.service';
 export function httpContext(context: ExecutionContext): { req: ApiRequest; res: Response } {
-  return context.getType<string>() === 'graphql'
-    ? GqlExecutionContext.create(context).getContext()
-    : { req: context.switchToHttp().getRequest(), res: context.switchToHttp().getResponse() };
+  return { req: context.switchToHttp().getRequest(), res: context.switchToHttp().getResponse() };
 }
 @Injectable()
 export class AuthGuard implements CanActivate {

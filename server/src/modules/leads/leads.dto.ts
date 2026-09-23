@@ -9,7 +9,7 @@ export const leadQuerySchema = z
     ...paginationShape,
     sort: z.enum(['CREATED_AT', 'UPDATED_AT', 'NAME']).default('CREATED_AT'),
     statusIds: ids,
-    source: z.enum(['meta', 'seed']).optional(),
+    source: z.enum(['meta', 'manual', 'seed']).optional(),
   })
   .strict()
   .refine(validPaging, 'Invalid pagination or date range');

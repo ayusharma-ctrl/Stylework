@@ -14,7 +14,10 @@ export const activityQuerySchema = z
     ...paginationShape,
     leadId: z.uuid().optional(),
     actorId: z.uuid().optional(),
-    types: z.array(z.enum(activityTypes)).max(10).optional(),
+    types: z.preprocess(
+      (v) => (typeof v === 'string' ? v.split(',') : v),
+      z.array(z.enum(activityTypes)).max(10).optional(),
+    ),
   })
   .strict()
   .refine(validPaging, 'Invalid pagination or date range');

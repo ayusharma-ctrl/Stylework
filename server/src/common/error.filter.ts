@@ -1,14 +1,11 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException } from '@nestjs/common';
-import { GqlArgumentsHost } from '@nestjs/graphql';
-import { GraphQLError } from 'graphql';
 import { UniqueConstraintError, ForeignKeyConstraintError, ConnectionError, TimeoutError } from 'sequelize';
 import { Telemetry } from './security/telemetry.service';
 @Catch()
 export class ErrorFilter implements ExceptionFilter {
   constructor(private readonly telemetry: Telemetry) {}
   catch(exception: unknown, host: ArgumentsHost) {
-    const gql = host.getType<string>() === 'graphql';
-    const req = gql ? GqlArgumentsHost.create(host).getContext().req : host.switchToHttp().getRequest();
+    const req = host.switchToHttp().getRequest();
     let status = 500,
       code = 'INTERNAL_ERROR',
       message = 'An unexpected error occurred',
@@ -35,6 +32,10 @@ export class ErrorFilter implements ExceptionFilter {
       status = 503;
       code = 'DATABASE_UNAVAILABLE';
       message = 'Database temporarily unavailable';
+    } else if (['encoding.unsupported', 'charset.unsupported'].includes((exception as any)?.type)) {
+      status = 415;
+      code = 'UNSUPPORTED_ENCODING';
+      message = 'Send uncompressed UTF-8 JSON';
     } else if ((exception as any)?.type === 'entity.too.large') {
       status = 413;
       code = 'PAYLOAD_TOO_LARGE';
@@ -53,10 +54,6 @@ export class ErrorFilter implements ExceptionFilter {
       },
       'request failed',
     );
-    if (gql)
-      return new GraphQLError(message, {
-        extensions: { code, http: { status }, requestId: req?.requestId, ...(details ? { details } : {}) },
-      });
     const res = host.switchToHttp().getResponse();
     if (res.headersSent) return res.end();
     if (status === 503) res.setHeader('Retry-After', '2');

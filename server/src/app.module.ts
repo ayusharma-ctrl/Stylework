@@ -10,7 +10,8 @@ import { RateGuard } from './common/security/rate.guard';
 import { ResponseInterceptor } from './common/response.interceptor';
 import { ErrorFilter } from './common/error.filter';
 import { WebhooksModule } from './modules/webhooks/webhooks.module';
-import { QueriesModule } from './modules/queries/queries.module';
+import { LeadsModule } from './modules/leads/leads.module';
+import { ActivitiesModule } from './modules/activities/activities.module';
 import { StatusesModule } from './modules/statuses/statuses.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
 @Module({
@@ -21,7 +22,8 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     UsersModule,
     HealthModule,
     WebhooksModule,
-    QueriesModule,
+    LeadsModule,
+    ActivitiesModule,
     StatusesModule,
     DashboardModule,
   ],

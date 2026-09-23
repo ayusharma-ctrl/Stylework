@@ -1,4 +1,5 @@
-import { Body, Controller, Get, Param, Post, Req, Res, UseGuards } from '@nestjs/common';
+import { Body, Controller, Get, Param, Post, Req, Res, UseGuards, Query } from '@nestjs/common';
+import { z } from 'zod';
 import { Response } from 'express';
 import { Public } from '../../common/public.decorator';
 import { ApiRequest } from '../../common/http.types';
@@ -17,12 +18,15 @@ export class WebhooksController {
     @Res({ passthrough: true }) res: Response,
     @Body(new ZodPipe(webhookSchema)) body: WebhookDto,
   ) {
-    const result = await this.service.accept(body, req.requestId, req.webhookCredentialId!);
+    const result = await this.service.accept(body, req.requestId, req.webhookCredentialId, req.principal);
     res.status(result.duplicate ? 200 : 202);
     return result;
   }
   @Get('webhook-events/:eventId')
-  outcome(@Param('eventId', new ZodPipe(eventIdSchema)) eventId: string) {
-    return this.service.outcome(eventId);
+  outcome(
+    @Param('eventId', new ZodPipe(eventIdSchema)) eventId: string,
+    @Query('source', new ZodPipe(z.enum(['meta', 'manual']).default('meta'))) source: 'meta' | 'manual',
+  ) {
+    return this.service.outcome(eventId, source);
   }
 }

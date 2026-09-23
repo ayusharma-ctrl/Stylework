@@ -1,7 +1,7 @@
 import { Injectable } from '@nestjs/common';
-import { Op, Transaction } from 'sequelize';
+import { Transaction } from 'sequelize';
 import { DatabaseService } from '../../database/database.service';
-import { Lead, Receipt, Status, Workspace } from '../../database/models';
+import { Lead, Receipt, Status, AppSettings } from '../../database/models';
 import { canonicalJson, hash } from '../../common/crypto';
 import { Telemetry } from '../../common/security/telemetry.service';
 import { AuditService } from '../events/audit.service';
@@ -52,11 +52,11 @@ export class LeadProcessor {
         const event = parsed.data,
           sourceHash = hash(canonicalJson(event.data));
         await this.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtextextended(:key,0))', {
-          replacements: { key: 'lead:meta:' + event.externalLeadId },
+          replacements: { key: 'lead:' + receipt.source + ':' + event.externalLeadId },
           transaction,
         });
         let lead = await Lead.findOne({
-          where: { source: 'meta', externalId: event.externalLeadId },
+          where: { source: receipt.source, externalId: event.externalLeadId },
           transaction,
           lock: transaction.LOCK.UPDATE,
         });
@@ -86,10 +86,10 @@ export class LeadProcessor {
           );
           return;
         }
-        const actor = { kind: 'webhook', label: 'Meta webhook' };
+        const actor = receipt.actor || { kind: 'webhook', label: 'Meta webhook' };
         if (!lead) {
-          const workspace = await Workspace.findByPk(1, { transaction, lock: transaction.LOCK.SHARE });
-          const status = await Status.findByPk(workspace!.defaultStatusId, {
+          const settings = await AppSettings.findByPk(1, { transaction, lock: transaction.LOCK.SHARE });
+          const status = await Status.findByPk(settings!.defaultStatusId, {
             transaction,
             lock: transaction.LOCK.SHARE,
           });
@@ -97,7 +97,7 @@ export class LeadProcessor {
           lead = await Lead.create(
             {
               ...event.data,
-              source: 'meta',
+              source: receipt.source,
               externalId: event.externalLeadId,
               sourceVersion: event.version,
               sourceHash,
@@ -113,11 +113,12 @@ export class LeadProcessor {
             entityType: 'lead',
             type: 'LEAD_CREATED',
             actor,
+            actorId: receipt.actorId || undefined,
             summary: 'Lead created: ' + lead.fullName,
             after: { ...event.data, status: { id: status.id, name: status.name } },
             requestId: receipt.requestId,
           });
-          await this.counters.created(transaction, lead.id, status.id, lead.createdAt, workspace!.timezone);
+          await this.counters.created(transaction, lead.id, status.id, lead.createdAt, settings!.timezone);
         } else {
           const before = {
             fullName: lead.fullName,
@@ -145,6 +146,7 @@ export class LeadProcessor {
               entityType: 'lead',
               type: 'LEAD_UPDATED',
               actor,
+              actorId: receipt.actorId || undefined,
               summary: 'Contact information updated: ' + lead.fullName,
               before,
               after: event.data,

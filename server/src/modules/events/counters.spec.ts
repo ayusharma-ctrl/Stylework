@@ -1,6 +1,6 @@
 import { dateKey, shardFor } from './counters.service';
 describe('dashboard accounting keys', () => {
-  it('uses workspace calendar boundaries', () => {
+  it('uses settings calendar boundaries', () => {
     expect(dateKey(new Date('2026-09-22T18:30:00Z'), 'Asia/Kolkata')).toBe('2026-09-23');
     expect(dateKey(new Date('2026-09-22T18:29:59Z'), 'Asia/Kolkata')).toBe('2026-09-22');
   });

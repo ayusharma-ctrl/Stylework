@@ -7,10 +7,6 @@ export class RateGuard implements CanActivate {
   constructor(private readonly limiter: RateLimiter) {}
   async canActivate(context: ExecutionContext) {
     const { req, res } = httpContext(context);
-    return (req.rateCheck ||= this.check(context));
-  }
-  private async check(context: ExecutionContext) {
-    const { req, res } = httpContext(context);
     if (req.path === '/signin' && typeof req.body?.email === 'string') {
       await this.limiter.consume(
         'signin-email',
@@ -20,7 +16,7 @@ export class RateGuard implements CanActivate {
         res,
       );
     } else if (req.principal) {
-      const read = req.method === 'GET' || context.getType<string>() === 'graphql';
+      const read = req.method === 'GET';
       await this.limiter.consume(
         read ? 'read-user' : 'write-user',
         req.principal.id,

@@ -3,9 +3,9 @@ import { Transaction } from 'sequelize';
 import { Receipt } from '../../database/models';
 @Injectable()
 export class WebhooksRepository {
-  find(eventId: string, transaction?: Transaction) {
+  find(eventId: string, transaction?: Transaction, source = 'meta') {
     return Receipt.findOne({
-      where: { source: 'meta', eventId },
+      where: { source, eventId },
       transaction,
       ...(transaction ? { lock: transaction.LOCK.UPDATE } : {}),
     });
@@ -14,6 +14,7 @@ export class WebhooksRepository {
     return {
       receiptId: receipt.id,
       eventId: receipt.eventId,
+      source: receipt.source,
       state: receipt.state,
       attempts: receipt.attempts,
       leadId: receipt.leadId,

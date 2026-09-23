@@ -1,6 +1,6 @@
 import { ConflictException, Injectable, NotFoundException } from '@nestjs/common';
 import { DatabaseService } from '../../database/database.service';
-import { Lead, Status, Workspace } from '../../database/models';
+import { Lead, Status, AppSettings } from '../../database/models';
 import { Principal } from '../../common/http.types';
 import { AuditService } from '../events/audit.service';
 import { CountersService } from '../events/counters.service';
@@ -18,7 +18,7 @@ export class LeadStatusService {
   ) {}
   async change(id: string, input: ChangeLeadStatus, principal: Principal, requestId: string) {
     await this.db.sequelize.transaction(async (transaction) => {
-      await Workspace.findByPk(1, { transaction, lock: transaction.LOCK.SHARE });
+      await AppSettings.findByPk(1, { transaction, lock: transaction.LOCK.SHARE });
       const status = await Status.findByPk(input.statusId, { transaction, lock: transaction.LOCK.SHARE });
       if (!status) throw new NotFoundException('Status not found');
       if (status.archivedAt) throw new ConflictException('Archived statuses cannot be assigned');

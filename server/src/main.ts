@@ -6,12 +6,14 @@ import { config } from './config/config';
 import helmet from 'helmet';
 import { RequestMiddleware } from './common/security/request.middleware';
 import { RuntimeState } from './common/security/runtime-state';
+import { responseCompression } from './common/compression';
 
 export async function bootstrap() {
-  const app = await NestFactory.create<NestExpressApplication>(AppModule, { rawBody: true });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   app.set('trust proxy', config.TRUST_PROXY ? config.TRUST_PROXY.split(',').map((s) => s.trim()) : false);
   app.use(app.get(RequestMiddleware).use);
   app.use(helmet());
+  app.use(responseCompression());
   app.enableCors({
     origin: config.CLIENT_ORIGINS.split(',').map((s) => new URL(s.trim()).origin),
     methods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],

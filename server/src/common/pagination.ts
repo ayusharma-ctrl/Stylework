@@ -10,8 +10,14 @@ export const paginationShape = {
   before: z.string().max(2048).optional(),
   search: z.string().trim().max(100).default(''),
   direction: z.enum(['ASC', 'DESC']).default('DESC'),
-  createdFrom: z.iso.datetime({ offset: true }).optional(),
-  createdTo: z.iso.datetime({ offset: true }).optional(),
+  createdFrom: z.iso
+    .datetime({ offset: true })
+    .transform((value) => new Date(value).toISOString())
+    .optional(),
+  createdTo: z.iso
+    .datetime({ offset: true })
+    .transform((value) => new Date(value).toISOString())
+    .optional(),
 };
 export function validPaging(v: {
   first?: number;
@@ -26,7 +32,7 @@ export function validPaging(v: {
     !(v.after && v.before) &&
     !(v.first && v.before) &&
     !(v.last && v.after) &&
-    !(v.createdFrom && v.createdTo && v.createdFrom >= v.createdTo)
+    !(v.createdFrom && v.createdTo && Date.parse(v.createdFrom) >= Date.parse(v.createdTo))
   );
 }
 const cursorSchema = z

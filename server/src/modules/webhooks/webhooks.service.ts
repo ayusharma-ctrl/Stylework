@@ -4,6 +4,7 @@ import {
   NotFoundException,
   ServiceUnavailableException,
   UnauthorizedException,
+  BadRequestException,
 } from '@nestjs/common';
 import { QueryTypes } from 'sequelize';
 import { Response } from 'express';
@@ -11,7 +12,9 @@ import { config } from '../../config/config';
 import { DatabaseService } from '../../database/database.service';
 import { Outbox, Receipt, WebhookCredential } from '../../database/models';
 import { canonicalJson, hash } from '../../common/crypto';
-import { ApiRequest } from '../../common/http.types';
+import { ApiRequest, Principal } from '../../common/http.types';
+import { AuthService } from '../auth/auth.service';
+import { z } from 'zod';
 import { RateLimiter } from '../../common/security/rate-limiter.service';
 import { WebhooksRepository } from './webhooks.repository';
 import { WebhookDto } from './webhook.dto';
@@ -26,8 +29,18 @@ export class WebhooksService {
     private readonly repository: WebhooksRepository,
     private readonly limiter: RateLimiter,
     private readonly credentials: WebhookCredentialsService,
+    private readonly auth: AuthService,
   ) {}
   async verify(req: ApiRequest, res: Response) {
+    if (req.headers['x-webhook-key'] === undefined) {
+      const access = req.headers.authorization,
+        refresh = req.headers['x-refresh-token'];
+      if (!access?.startsWith('Bearer ') || typeof refresh !== 'string')
+        throw new UnauthorizedException('Webhook key or access and refresh tokens are required');
+      req.principal = await this.auth.authenticate(access.slice(7), refresh, res);
+      await this.limiter.consume('write-user', req.principal.id, config.WRITE_USER_LIMIT, 60000, res);
+      return;
+    }
     req.webhookCredentialId = (await this.credentials.verify(req.headers['x-webhook-key'])).id;
     await this.limiter.consume(
       'webhook-integration',
@@ -56,25 +69,31 @@ export class WebhooksService {
     }
     return this.backlog >= config.MAX_PENDING_EVENTS;
   }
-  async accept(payload: WebhookDto, requestId: string, credentialId: string) {
+  async accept(payload: WebhookDto, requestId: string, credentialId?: string, principal?: Principal) {
+    if (!credentialId && !principal) throw new UnauthorizedException();
+    const source = credentialId ? 'meta' : 'manual';
+    if (source === 'manual' && (payload.version !== 1 || !z.uuid().safeParse(payload.externalLeadId).success))
+      throw new BadRequestException('Manual intake requires version 1 and a UUID externalLeadId');
     const overloaded = await this.overloaded(),
       payloadHash = hash(canonicalJson(payload));
     return this.db.sequelize.transaction(async (transaction) => {
-      const credential = await WebhookCredential.findByPk(credentialId, {
-        transaction,
-        lock: transaction.LOCK.SHARE,
-      });
-      if (
-        !credential ||
-        credential.revokedAt ||
-        (credential.expiresAt && credential.expiresAt.getTime() <= Date.now())
-      )
-        throw new UnauthorizedException('Webhook key is no longer active');
+      if (credentialId) {
+        const credential = await WebhookCredential.findByPk(credentialId, {
+          transaction,
+          lock: transaction.LOCK.SHARE,
+        });
+        if (
+          !credential ||
+          credential.revokedAt ||
+          (credential.expiresAt && credential.expiresAt.getTime() <= Date.now())
+        )
+          throw new UnauthorizedException('Webhook key is no longer active');
+      }
       await this.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtextextended(:key,0))', {
-        replacements: { key: 'receipt:meta:' + payload.eventId },
+        replacements: { key: 'receipt:' + source + ':' + payload.eventId },
         transaction,
       });
-      const existing = await this.repository.find(payload.eventId, transaction);
+      const existing = await this.repository.find(payload.eventId, transaction, source);
       if (existing) {
         if (existing.payloadHash !== payloadHash)
           throw new ConflictException({
@@ -89,7 +108,15 @@ export class WebhooksService {
           message: 'Intake backlog is full; retry this event later',
         });
       const receipt = await Receipt.create(
-        { source: 'meta', eventId: payload.eventId, payloadHash, payload, requestId },
+        {
+          source,
+          eventId: payload.eventId,
+          payloadHash,
+          payload,
+          requestId,
+          actorId: source === 'manual' ? principal!.id : null,
+          actor: source === 'manual' ? { kind: 'user', label: principal!.email } : null,
+        },
         { transaction },
       );
       await Outbox.create(
@@ -99,8 +126,8 @@ export class WebhooksService {
       return { ...this.repository.safe(receipt), duplicate: false };
     });
   }
-  async outcome(eventId: string) {
-    const receipt = await this.repository.find(eventId);
+  async outcome(eventId: string, source: 'meta' | 'manual' = 'meta') {
+    const receipt = await this.repository.find(eventId, undefined, source);
     if (!receipt) throw new NotFoundException('Webhook event not found');
     return this.repository.safe(receipt);
   }

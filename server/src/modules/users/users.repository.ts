@@ -1,5 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { Status, User, Workspace } from '../../database/models';
+import { Status, User, AppSettings } from '../../database/models';
 @Injectable()
 export class UsersRepository {
   async findOrCreate(email: string) {
@@ -11,7 +11,7 @@ export class UsersRepository {
     return user;
   }
   async profile(id: string) {
-    const [user, statuses, workspace] = await Promise.all([
+    const [user, statuses, settings] = await Promise.all([
       this.find(id),
       Status.findAll({
         order: [
@@ -19,12 +19,12 @@ export class UsersRepository {
           ['id', 'ASC'],
         ],
       }),
-      Workspace.findByPk(1),
+      AppSettings.findByPk(1),
     ]);
     return {
       user: { id: user.id, email: user.email, meta: user.meta, createdAt: user.createdAt },
       statuses: statuses.map((s) => s.toJSON()),
-      workspace: workspace!.toJSON(),
+      settings: settings!.toJSON(),
     };
   }
 }

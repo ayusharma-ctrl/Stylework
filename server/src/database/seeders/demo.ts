@@ -18,7 +18,7 @@ WITH inserted AS (
  ||' '||(ARRAY['Sharma','Patel','Mehta','Rao','Singh','Kapoor','Shah','Joshi','Nair','Gupta','Malhotra','Das','Verma'])[1+((i/16)%13)],
  'lead'||i||'@example.test','+91'||lpad((9000000000+i)::text,10,'0'),
  (ARRAY['Orbit Labs','Northstar','Apex Studio','Urban Company','Meridian','Cloudnine','Elevate','Brightside'])[1+(i%8)],
- (ARRAY['Summer workspace','Founder community','Remote teams','Enterprise spaces'])[1+(i%4)],
+ (ARRAY['Summer settings','Founder community','Remote teams','Enterprise spaces'])[1+(i%4)],
  ('00000000-0000-4000-8000-'||lpad((CASE WHEN i<=75 THEN 2+i%4 ELSE 1 END)::text,12,'0'))::uuid,
  now() - ((CASE WHEN i<=3 THEN i*60 WHEN i<=6 THEN 86400+i*60 ELSE i::bigint*15485863 % 31536000 END) * interval '1 second'),
  now() - (greatest(0,(CASE WHEN i<=3 THEN i*60 WHEN i<=6 THEN 86400+i*60 ELSE i::bigint*15485863 % 31536000 END)-120) * interval '1 second'),
@@ -56,7 +56,7 @@ INSERT INTO dashboard_counters(key,shard,value)
  UNION ALL
  SELECT 'status:'||status_id,get_byte(decode(replace(id::text,'-',''),'hex'),15)%64,count(*) FROM leads GROUP BY 1,2
  UNION ALL
- SELECT 'day:'||to_char(created_at AT TIME ZONE (SELECT timezone FROM workspace_settings WHERE id=1),'YYYY-MM-DD'),
+ SELECT 'day:'||to_char(created_at AT TIME ZONE (SELECT timezone FROM app_settings WHERE id=1),'YYYY-MM-DD'),
  get_byte(decode(replace(id::text,'-',''),'hex'),15)%64,count(*) FROM leads GROUP BY 1,2
 `,
       { transaction },

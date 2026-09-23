@@ -27,11 +27,11 @@ export class ActivitiesRepository {
       replacements.types = input.types;
     }
     if (input.createdFrom) {
-      where.push('created_at>=:from');
+      where.push('created_at>= :from');
       replacements.from = input.createdFrom;
     }
     if (input.createdTo) {
-      where.push('created_at<:to');
+      where.push('created_at< :to');
       replacements.to = input.createdTo;
     }
     const asc = (input.direction === 'ASC') !== page.backward,

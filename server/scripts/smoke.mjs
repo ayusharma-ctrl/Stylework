@@ -85,22 +85,10 @@ try {
     statusId: status.id,
     expectedVersion: lead.version,
   });
-  const gql = await fetch(base + '/graphql', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headers },
-    body: JSON.stringify({
-      query:
-        'query($id:ID!){lead(id:$id){id status{id}} activities(input:{leadId:$id,first:10}){nodes{type}}}',
-      variables: { id: lead.id },
-    }),
-  });
-  const result = await gql.json();
-  assert.ok(!result.errors);
-  assert.equal(result.data.lead.status.id, status.id);
-  assert.deepEqual(result.data.activities.nodes.map((a) => a.type).sort(), [
-    'LEAD_CREATED',
-    'STATUS_CHANGED',
-  ]);
+  const updated = await call('/leads/' + lead.id);
+  const activities = await call('/activities?leadId=' + lead.id + '&first=10');
+  assert.equal(updated.status.id, status.id);
+  assert.deepEqual(activities.nodes.map((a) => a.type).sort(), ['LEAD_CREATED', 'STATUS_CHANGED']);
   let latest = await snapshot();
   while (
     latest.statuses.find((s) => s.id === status.id).value <=

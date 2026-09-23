@@ -10,7 +10,7 @@ export async function seedReference(db: Sequelize) {
         { replacements: { id: statusIds[i], name: names[i], color: colors[i], position: i }, transaction },
       );
     await db.query(
-      "INSERT INTO workspace_settings(id,default_status_id,timezone) VALUES(1,:id,'Asia/Kolkata') ON CONFLICT(id) DO NOTHING",
+      "INSERT INTO app_settings(id,default_status_id,timezone) VALUES(1,:id,'Asia/Kolkata') ON CONFLICT(id) DO NOTHING",
       { replacements: { id: statusIds[0] }, transaction },
     );
   });

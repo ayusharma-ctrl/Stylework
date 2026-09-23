@@ -1,0 +1,30 @@
+import { Sequelize } from 'sequelize';
+import { User } from './user.model';
+export { User } from './user.model';
+import { Session } from './session.model';
+export { Session } from './session.model';
+import { Status } from './status.model';
+export { Status } from './status.model';
+import { AppSettings } from './app-settings.model';
+export { AppSettings } from './app-settings.model';
+import { Lead } from './lead.model';
+export { Lead } from './lead.model';
+import { Activity } from './activity.model';
+export { Activity } from './activity.model';
+import { Receipt } from './receipt.model';
+export { Receipt } from './receipt.model';
+import { Outbox } from './outbox.model';
+export { Outbox } from './outbox.model';
+import { WebhookCredential } from './webhook-credential.model';
+export { WebhookCredential } from './webhook-credential.model';
+export function registerModels(sequelize: Sequelize) {
+  User.register(sequelize);
+  Session.register(sequelize);
+  Status.register(sequelize);
+  AppSettings.register(sequelize);
+  Lead.register(sequelize);
+  Activity.register(sequelize);
+  Receipt.register(sequelize);
+  Outbox.register(sequelize);
+  WebhookCredential.register(sequelize);
+}

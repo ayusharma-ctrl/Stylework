@@ -7,7 +7,5 @@ export interface Principal {
 export interface ApiRequest extends Request {
   principal?: Principal;
   requestId: string;
-  rawBody?: Buffer;
   webhookCredentialId?: string;
-  rateCheck?: Promise<boolean>;
 }

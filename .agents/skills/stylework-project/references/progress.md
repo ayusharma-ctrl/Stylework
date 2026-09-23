@@ -4,9 +4,12 @@
 - Recorded agreed architecture and 18-commit sequence.
 - Implemented the API, worker, database, React workspace, tests and deployment configuration across all 18 local milestones.
 ## Current
-Local implementation and verification complete, including the small-data scope correction.
+September 24 follow-up: REST-only refactor, date-filter fix, compression, separate model files, single-tenant settings and manual lead creation implemented. Final Docker/browser checks in progress.
 ## Remaining
 Hosted publication, public URLs and remote CI execution are not completed. Deployment-specific throughput/soak and exhaustive process-kill tests remain unverified; do not run large-data tests without new explicit authorization.
+
+## September 24 revision
+Confirmed the date-range failure with Sequelize's replacement parser: `<:to` stays literal SQL, whereas `< :to` is substituted. Fixed both read repositories and compare date instants across offsets. Removed GraphQL modules/dependencies and obsolete milestone smoke scripts; GET /activities and REST frontend retain bounded bidirectional pagination. Models are split into separate files. Migration 003 renames the singleton configuration without resetting data and adds trusted intake actor fields. Manual submissions authenticate with sessions on the same webhook route, use source manual, preserve duplicate semantics and generate user-attributed audit. Added gzip/Brotli API compression, Nginx static compression and exclusions for SSE/sign-in. Initial revised checks: backend build, 22 unit tests, 24 integration scenarios and frontend build/7 tests passed. Added final quota/unsupported-encoding regression; browser checks pending. Existing user edit to server/jest.config.cjs is intentionally preserved and excluded from commits.
 ## Verification
 - Docker restored; both images and the complete stack verified healthy.
 - No application existed before this implementation.

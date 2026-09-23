@@ -42,11 +42,11 @@ export class LeadsRepository {
       replacements.source = input.source;
     }
     if (input.createdFrom) {
-      where.push('l.created_at>=:from');
+      where.push('l.created_at>= :from');
       replacements.from = input.createdFrom;
     }
     if (input.createdTo) {
-      where.push('l.created_at<:to');
+      where.push('l.created_at< :to');
       replacements.to = input.createdTo;
     }
     const asc = (input.direction === 'ASC') !== page.backward;

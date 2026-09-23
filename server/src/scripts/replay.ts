@@ -1,15 +1,16 @@
 import 'reflect-metadata';
-import { Op } from 'sequelize';
 import { DatabaseService } from '../database/database.service';
-import { Outbox, Receipt } from '../database/models';
+import { Receipt } from '../database/models';
 async function main() {
-  const eventId = process.argv[2];
-  if (!eventId) throw new Error('Usage: npm run webhook:replay -- EVENT_ID');
+  const eventId = process.argv[2],
+    source = process.argv[3] || 'meta';
+  if (!['meta', 'manual'].includes(source)) throw new Error('Source must be meta or manual');
+  if (!eventId) throw new Error('Usage: npm run webhook:replay -- EVENT_ID [meta|manual]');
   const db = new DatabaseService();
   try {
     await db.sequelize.transaction(async (transaction) => {
       const receipt = await Receipt.findOne({
-        where: { source: 'meta', eventId },
+        where: { source, eventId },
         transaction,
         lock: transaction.LOCK.UPDATE,
       });

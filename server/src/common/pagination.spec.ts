@@ -1,4 +1,4 @@
-import { encodeCursor, decodeCursor, paging } from './pagination';
+import { encodeCursor, decodeCursor, paging, validPaging } from './pagination';
 describe('pagination cursors', () => {
   const value = {
     v: 1 as const,
@@ -11,4 +11,15 @@ describe('pagination cursors', () => {
   it('rejects cursor tampering', () => expect(() => decodeCursor(encodeCursor(value) + 'x')).toThrow());
   it('binds cursors to filters', () =>
     expect(() => paging({ after: encodeCursor(value), search: 'other' })).toThrow('filters'));
+});
+
+describe('date range instants', () => {
+  it('compares offsets as instants instead of strings', () =>
+    expect(validPaging({ createdFrom: '2026-09-24T00:00:00+05:30', createdTo: '2026-09-23T20:00:00Z' })).toBe(
+      true,
+    ));
+  it('rejects an empty or inverted interval', () =>
+    expect(validPaging({ createdFrom: '2026-09-24T00:00:00Z', createdTo: '2026-09-24T05:30:00+05:30' })).toBe(
+      false,
+    ));
 });

@@ -2,7 +2,7 @@ import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { QueryTypes, Transaction } from 'sequelize';
 import Redis from 'ioredis';
 import { DatabaseService } from '../../database/database.service';
-import { Status, Workspace } from '../../database/models';
+import { Status, AppSettings } from '../../database/models';
 import { RedisService } from '../../common/security/redis.service';
 import { Telemetry } from '../../common/security/telemetry.service';
 import { canonicalJson, hash } from '../../common/crypto';
@@ -65,7 +65,7 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
       return await this.db.sequelize.transaction(
         { isolationLevel: Transaction.ISOLATION_LEVELS.REPEATABLE_READ, readOnly: true },
         async (transaction) => {
-          const workspace = (await Workspace.findByPk(1, { transaction }))!;
+          const settings = (await AppSettings.findByPk(1, { transaction }))!;
           const statuses = await Status.findAll({
             order: [
               ['position', 'ASC'],
@@ -85,7 +85,7 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
    ) AS revision`,
             { type: QueryTypes.SELECT, transaction },
           );
-          const today = dateKey(new Date(), workspace.timezone),
+          const today = dateKey(new Date(), settings.timezone),
             calendar = new Date(today + 'T00:00:00Z');
           calendar.setUTCDate(calendar.getUTCDate() - 1);
           const yesterday = calendar.toISOString().slice(0, 10);
@@ -107,12 +107,12 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
           });
           return {
             generatedAt: new Date().toISOString(),
-            timezone: workspace.timezone,
-            catalogVersion: workspace.catalogVersion,
+            timezone: settings.timezone,
+            catalogVersion: settings.catalogVersion,
             revision: hash(
               canonicalJson({
                 today,
-                catalogVersion: workspace.catalogVersion,
+                catalogVersion: settings.catalogVersion,
                 latest: latest?.revision,
                 values: Object.fromEntries(values),
               }),
@@ -123,14 +123,14 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
                 label: 'Total leads',
                 value: total,
                 format: 'number',
-                description: 'Across your workspace',
+                description: 'Across all leads',
               },
               {
                 key: 'today',
                 label: 'Created today',
                 value: todayCount,
                 format: 'number',
-                description: 'Since midnight in ' + workspace.timezone,
+                description: 'Since midnight in ' + settings.timezone,
               },
               {
                 key: 'yesterday',
@@ -153,7 +153,7 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
               color: s.color,
               value: values.get('status:' + s.id) || 0,
               archived: !!s.archivedAt,
-              isDefault: s.id === workspace.defaultStatusId,
+              isDefault: s.id === settings.defaultStatusId,
             })),
             trend,
           };
