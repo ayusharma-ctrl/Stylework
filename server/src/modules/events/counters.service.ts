@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Transaction } from 'sequelize';
-import { DatabaseService } from '../../database/database.service';
+import { DashboardCounter } from '../../database/models';
+
 export function dateKey(date: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat('en-CA', {
     timeZone,
@@ -16,18 +17,14 @@ export function shardFor(id: string) {
 }
 @Injectable()
 export class CountersService {
-  constructor(private readonly db: DatabaseService) {}
+
   private async apply(transaction: Transaction, id: string, changes: Record<string, number>) {
     for (const key of Object.keys(changes).sort()) {
       if (!changes[key]) continue;
-      await this.db.sequelize.query(
-        'INSERT INTO dashboard_counters(key,shard,value) VALUES(:key,:shard,0) ON CONFLICT DO NOTHING',
-        { replacements: { key, shard: shardFor(id) }, transaction },
-      );
-      await this.db.sequelize.query(
-        'UPDATE dashboard_counters SET value = value + :delta, updated_at=now() WHERE key=:key AND shard=:shard',
-        { replacements: { key, shard: shardFor(id), delta: changes[key] }, transaction },
-      );
+
+      const shard = shardFor(id);
+      await DashboardCounter.bulkCreate([{ key, shard, value: 0 }], { ignoreDuplicates: true, transaction });
+      await DashboardCounter.increment({ value: changes[key] }, { where: { key, shard }, transaction });
     }
   }
   created(transaction: Transaction, id: string, statusId: string, createdAt: Date, timezone: string) {

@@ -1,11 +1,21 @@
-import { Sequelize } from 'sequelize';
+import { Sequelize, QueryOptions } from 'sequelize';
 export async function seedDemo(db: Sequelize, count = 150) {
   if (!Number.isSafeInteger(count) || count < 1 || count > 200) throw new Error('SEED_COUNT must be 1..200');
   // Batch writes keep memory and transactions bounded. Deterministic identifiers make reruns additive.
-  await db.query(`INSERT INTO users(id,email,meta)
-    SELECT ('10000000-0000-4000-8000-'||lpad(i::text,12,'0'))::uuid,
-    'teammate'||i||'@example.test', jsonb_build_object('theme',CASE WHEN i%3=0 THEN 'dark' ELSE 'light' END)
-    FROM generate_series(1,12) i ON CONFLICT DO NOTHING`);
+  await db.getQueryInterface().bulkInsert(
+    'users',
+    Array.from({ length: 12 }, (_, offset) => {
+      const i = offset + 1;
+      return {
+        id: '10000000-0000-4000-8000-' + String(i).padStart(12, '0'),
+        email: 'teammate' + i + '@example.test',
+        meta: JSON.stringify({ theme: i % 3 === 0 ? 'dark' : 'light' }),
+      };
+    }),
+    { ignoreDuplicates: true } as QueryOptions,
+  );
+  // Keep this data-modifying CTE: only newly inserted leads create audit rows,
+  // atomically in one round trip, including concurrent/additive seeder runs.
   for (let start = 1; start <= count; start += 1000) {
     await db.transaction(async (transaction) => {
       await db.query(
@@ -46,7 +56,8 @@ export async function rebuildCounters(db: Sequelize) {
     // Maintenance-only command: blocks lead writes while taking an exact replacement snapshot.
     await db.query("SET LOCAL statement_timeout = '10min'", { transaction });
     await db.query('LOCK TABLE leads,activities IN SHARE MODE', { transaction });
-    await db.query('DELETE FROM dashboard_counters', { transaction });
+    await db.getQueryInterface().bulkDelete('dashboard_counters', {}, { transaction });
+    // INSERT...SELECT/UNION keeps the full rebuild inside PostgreSQL, without loading all leads into Node.
     await db.query(
       `
 INSERT INTO dashboard_counters(key,shard,value)

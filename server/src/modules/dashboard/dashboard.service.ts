@@ -1,8 +1,8 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
-import { QueryTypes, Transaction } from 'sequelize';
+import { QueryTypes, Transaction, fn, col } from 'sequelize';
 import Redis from 'ioredis';
 import { DatabaseService } from '../../database/database.service';
-import { Status, AppSettings } from '../../database/models';
+import { Status, AppSettings, DashboardCounter } from '../../database/models';
 import { RedisService } from '../../common/security/redis.service';
 import { Telemetry } from '../../common/security/telemetry.service';
 import { canonicalJson, hash } from '../../common/crypto';
@@ -73,11 +73,14 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
             ],
             transaction,
           });
-          const rows = await this.db.sequelize.query<{ key: string; value: string }>(
-            'SELECT key,sum(value) AS value FROM dashboard_counters GROUP BY key',
-            { type: QueryTypes.SELECT, transaction },
-          );
+
+          const rows = await DashboardCounter.findAll({
+            attributes: ['key', [fn('sum', col('value')), 'value']], group: ['key'], transaction,
+          });
+
           const values = new Map(rows.map((row) => [row.key, Number(row.value)]));
+
+          // Two independent index-top reads in one round trip; Sequelize cannot express this scalar subquery projection.
           const [latest] = await this.db.sequelize.query<{ revision: string }>(
             `SELECT concat(
     (SELECT concat(updated_at::text,id::text) FROM leads ORDER BY updated_at DESC,id DESC LIMIT 1),':',

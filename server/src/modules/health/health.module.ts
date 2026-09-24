@@ -15,7 +15,9 @@ import { RuntimeState } from '../../common/security/runtime-state';
 import { Telemetry } from '../../common/security/telemetry.service';
 import { config } from '../../config/config';
 import { secureEqual } from '../../common/crypto';
-import { QueryTypes } from 'sequelize';
+import { fn, col, literal } from 'sequelize';
+import { Receipt } from '../../database/models';
+
 @Public()
 @Controller()
 class HealthController {
@@ -40,15 +42,14 @@ class HealthController {
   @Get('metrics') async metrics(@Req() req: Request, @Res() res: Response) {
     if (!secureEqual(req.headers.authorization || '', 'Bearer ' + config.METRICS_TOKEN))
       throw new UnauthorizedException();
-    const rows = await this.db.sequelize.query<{
-      state: string;
-      count: string;
-      age: string;
-      retries: string;
-    }>(
-      'SELECT state,count(*) AS count,coalesce(extract(epoch FROM now()-min(created_at)),0) AS age,count(*) FILTER(WHERE attempts>1) AS retries FROM webhook_receipts GROUP BY state',
-      { type: QueryTypes.SELECT },
-    );
+
+    const rows = await Receipt.findAll({
+      attributes: ['state', [fn('count', col('id')), 'count'], [fn('min', col('created_at')), 'oldest'],
+        // PostgreSQL filtered aggregate avoids a second scan or materializing receipts.
+        [literal('count(*) FILTER (WHERE attempts > 1)'), 'retries']],
+      group: ['state'], raw: true,
+    }) as unknown as { state: string; count: string; oldest: Date | null; retries: string }[];
+
     this.telemetry.pending.set(0);
     this.telemetry.queueAge.set(0);
     let retries = 0;
@@ -59,7 +60,7 @@ class HealthController {
       retries += Number(row.retries);
       if (row.state === 'pending') {
         this.telemetry.pending.set(Number(row.count));
-        this.telemetry.queueAge.set(Number(row.age));
+        this.telemetry.queueAge.set(row.oldest ? Math.max(0, (Date.now() - new Date(row.oldest).getTime()) / 1000) : 0);
       }
     }
     this.telemetry.retries.set(retries);

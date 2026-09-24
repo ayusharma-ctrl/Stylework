@@ -585,3 +585,75 @@ test('small demo seeder is bounded, related and repeatable', async () => {
   await seedDemo(db.sequelize);
   expect(await Lead.count({ where: { source: 'seed' } })).toBe(150);
 });
+
+test('ORM pagination preserves microseconds, tuple ties and literal search characters', async () => {
+  const search = "Precision %_\\' " + randomUUID();
+  const ids: string[] = [];
+  for (let i = 1; i <= 3; i++) {
+    const receipt = await intake(event({ data: { fullName: search, email: 'precision@example.test' } }));
+    await processor.process(receipt.id);
+    await receipt.reload();
+    ids.push(receipt.leadId!);
+    const at = '2020-01-01T00:00:00.00000' + i + 'Z';
+    // Fixture SQL intentionally creates precision that a JavaScript Date cannot represent.
+    await db.sequelize.query('UPDATE leads SET created_at=:at, updated_at=:at WHERE id=:id', {
+      replacements: { at, id: receipt.leadId },
+    });
+    await db.sequelize.query(
+      "INSERT INTO activities(lead_id,entity_id,entity_type,type,actor,summary,request_id,created_at) VALUES(:id,:id,'lead','LEAD_UPDATED','{}',:summary,:requestId,:at)",
+      { replacements: { id: receipt.leadId, summary: search, requestId: randomUUID(), at } },
+    );
+  }
+  for (const direction of ['ASC', 'DESC']) {
+    for (const [route, sorts] of [
+      ['/leads', ['CREATED_AT', 'UPDATED_AT', 'NAME']],
+      ['/activities', [undefined]],
+    ] as const) {
+      for (const sort of sorts) {
+        const filters = {
+          search,
+          direction,
+          ...(sort ? { sort } : {}),
+          createdFrom: '2020-01-01T00:00:00Z',
+          createdTo: '2020-01-02T00:00:00Z',
+        };
+        const get = (page: object) =>
+          request(app.getHttpServer())
+            .get(route)
+            .query({ ...filters, ...page })
+            .set(headers());
+        const all: string[] = [];
+        let cursor: string | undefined;
+        let firstPage: any;
+        for (let i = 0; i < 3; i++) {
+          const response = await get({ first: 1, ...(cursor ? { after: cursor } : {}) });
+          expect(response.status).toBe(200);
+          const page = response.body.data;
+          expect(page.nodes).toHaveLength(1);
+          all.push(page.nodes[0].id);
+          if (i === 0) firstPage = page;
+          if (i === 1) {
+            const back = await get({ last: 1, before: page.pageInfo.startCursor });
+            expect(back.body.data.nodes).toEqual(firstPage.nodes);
+          }
+          cursor = page.pageInfo.endCursor;
+          expect(page.pageInfo.hasNextPage).toBe(i < 2);
+        }
+        expect(new Set(all).size).toBe(3);
+        if (route === '/leads') expect(all.slice().sort()).toEqual(ids.slice().sort());
+      }
+    }
+  }
+});
+
+test('ORM receipt aggregates expose protected metrics with accurate state counts', async () => {
+  expect((await request(app.getHttpServer()).get('/metrics')).status).toBe(401);
+  const response = await request(app.getHttpServer())
+    .get('/metrics')
+    .set('Authorization', 'Bearer ' + config.METRICS_TOKEN);
+  expect(response.status).toBe(200);
+  for (const state of ['pending', 'processed', 'ignored', 'failed']) {
+    const count = await Receipt.count({ where: { state } });
+    expect(response.text).toContain('stylework_receipts{state="' + state + '"} ' + count);
+  }
+});

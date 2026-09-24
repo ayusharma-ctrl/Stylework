@@ -20,6 +20,8 @@ export class AuditService {
   constructor(private readonly db: DatabaseService) {}
   async record(transaction: Transaction, input: ActivityInput) {
     const record = await Activity.create({ ...input, createdAt: new Date() }, { transaction });
+
+    // Atomic additive upsert: Sequelize upsert replaces values instead of incrementing them.
     await this.db.sequelize.query(
       "INSERT INTO dashboard_counters(key,shard,value) VALUES('activity',:shard,1) ON CONFLICT(key,shard) DO UPDATE SET value=dashboard_counters.value+1,updated_at=now()",
       { replacements: { shard: shardFor(input.entityId) }, transaction },

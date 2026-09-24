@@ -1,10 +1,7 @@
 import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
 import { Queue, Worker } from 'bullmq';
 import Redis from 'ioredis';
-import { Op, QueryTypes } from 'sequelize';
-import { writeFile } from 'node:fs/promises';
-import { join } from 'node:path';
-import { tmpdir } from 'node:os';
+import { Op, fn, col } from 'sequelize';
 import { config } from '../../config/config';
 import { DatabaseService } from '../../database/database.service';
 import { Outbox, Receipt } from '../../database/models';
@@ -133,14 +130,15 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     });
   }
   private async observe() {
-    const [row] = await this.db.sequelize.query<{ count: string; age: string }>(
-      "SELECT count(*) AS count,coalesce(extract(epoch FROM now()-min(created_at)),0) AS age FROM webhook_receipts WHERE state='pending'",
-      { type: QueryTypes.SELECT },
-    );
-    this.telemetry.pending.set(Number(row!.count));
-    this.telemetry.queueAge.set(Number(row!.age));
-    await this.redis.client.ping();
-    await writeFile(join(tmpdir(), 'stylework-worker'), String(Date.now()));
+    const row = await Receipt.findOne({
+      attributes: [[fn('count', col('id')), 'count'], [fn('min', col('created_at')), 'oldest']],
+      where: { state: 'pending' }, raw: true,
+    }) as unknown as { count: string; oldest: Date | null };
+    const age = row.oldest ? (Date.now() - new Date(row.oldest).getTime()) / 1000 : 0;
+
+    this.telemetry.pending.set(Number(row.count));
+    this.telemetry.queueAge.set(Math.max(0, age));
+
   }
   stop() {
     return (this.stopped ||= (async () => {

@@ -16,6 +16,9 @@ export { Receipt } from './receipt.model';
 import { Outbox } from './outbox.model';
 export { Outbox } from './outbox.model';
 import { WebhookCredential } from './webhook-credential.model';
+import { DashboardCounter } from './dashboard-counter.model';
+export { DashboardCounter } from './dashboard-counter.model';
+
 export { WebhookCredential } from './webhook-credential.model';
 export function registerModels(sequelize: Sequelize) {
   User.register(sequelize);
@@ -27,4 +30,6 @@ export function registerModels(sequelize: Sequelize) {
   Receipt.register(sequelize);
   Outbox.register(sequelize);
   WebhookCredential.register(sequelize);
+  DashboardCounter.register(sequelize);
+  Lead.belongsTo(Status, { as: 'status', foreignKey: 'statusId' });
 }

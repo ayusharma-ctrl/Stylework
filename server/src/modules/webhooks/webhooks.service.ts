@@ -42,6 +42,7 @@ export class WebhooksService {
   }
   private async overloaded() {
     if (Date.now() - this.checked > 1000) {
+      // Count only up to the admission threshold in PostgreSQL; Model.count scans the entire backlog.
       this.checking ||= this.db.sequelize
         .query<{ count: number }>(
           "SELECT count(*)::int AS count FROM (SELECT id FROM webhook_receipts WHERE state='pending' LIMIT :limit) q",
