@@ -26,10 +26,12 @@ class HealthController {
     private readonly redis: RedisService,
     private readonly state: RuntimeState,
     private readonly telemetry: Telemetry,
-  ) {}
+  ) { }
+
   @Get('health/live') live() {
     return { status: 'ok' };
   }
+
   @Get('health/ready') async ready() {
     try {
       if (this.state.draining) throw new Error('draining');
@@ -39,9 +41,11 @@ class HealthController {
       throw new ServiceUnavailableException('Dependencies unavailable or server draining');
     }
   }
+
   @Get('metrics') async metrics(@Req() req: Request, @Res() res: Response) {
-    if (!secureEqual(req.headers.authorization || '', 'Bearer ' + config.METRICS_TOKEN))
+    if (!secureEqual(req.headers.authorization || '', 'Bearer ' + config.METRICS_TOKEN)) {
       throw new UnauthorizedException();
+    }
 
     const rows = await Receipt.findAll({
       attributes: ['state', [fn('count', col('id')), 'count'], [fn('min', col('created_at')), 'oldest'],
@@ -53,22 +57,33 @@ class HealthController {
     this.telemetry.pending.set(0);
     this.telemetry.queueAge.set(0);
     let retries = 0;
-    for (const state of ['pending', 'processed', 'ignored', 'failed'])
+
+    for (const state of ['pending', 'processed', 'ignored', 'failed']) {
       this.telemetry.receiptStates.set({ state }, 0);
+    }
+
     for (const row of rows) {
       this.telemetry.receiptStates.set({ state: row.state }, Number(row.count));
       retries += Number(row.retries);
+
       if (row.state === 'pending') {
         this.telemetry.pending.set(Number(row.count));
         this.telemetry.queueAge.set(row.oldest ? Math.max(0, (Date.now() - new Date(row.oldest).getTime()) / 1000) : 0);
       }
     }
+
     this.telemetry.retries.set(retries);
+
     const pool = (this.db.sequelize.connectionManager as any).pool;
-    for (const state of ['size', 'available', 'using', 'waiting'])
+
+    for (const state of ['size', 'available', 'using', 'waiting']) {
       this.telemetry.pool.set({ state }, Number(pool?.[state] || 0));
+    }
+
     res.type(this.telemetry.registry.contentType).send(await this.telemetry.registry.metrics());
   }
 }
+
 @Module({ controllers: [HealthController] })
-export class HealthModule {}
+
+export class HealthModule { }

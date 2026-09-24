@@ -6,6 +6,7 @@ import {
   RequestTimeoutException,
 } from '@nestjs/common';
 import { catchError, map, throwError, timeout, TimeoutError } from 'rxjs';
+
 @Injectable()
 export class ResponseInterceptor implements NestInterceptor {
   intercept(context: ExecutionContext, next: CallHandler) {

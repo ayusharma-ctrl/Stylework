@@ -1,6 +1,7 @@
 import { Sequelize, QueryOptions } from 'sequelize';
 
 export const statusIds = [1, 2, 3, 4, 5].map((n) => '00000000-0000-4000-8000-' + String(n).padStart(12, '0'));
+
 export async function seedReference(db: Sequelize) {
   await db.transaction(async (transaction) => {
     const names = ['Open', 'Contacted', 'Qualified', 'Disqualified', 'Converted'];

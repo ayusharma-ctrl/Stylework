@@ -10,6 +10,7 @@ import { responseCompression } from './common/compression';
 
 export async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule);
+
   app.set('trust proxy', config.TRUST_PROXY ? config.TRUST_PROXY.split(',').map((s) => s.trim()) : false);
   app.use(app.get(RequestMiddleware).use);
   app.use(helmet());
@@ -22,19 +23,25 @@ export async function bootstrap() {
     credentials: false,
   });
   app.useBodyParser('json', { limit: '64kb', inflate: false });
+
   const server = app.getHttpServer();
   server.requestTimeout = 15000;
   server.headersTimeout = 10000;
   server.keepAliveTimeout = 5000;
-  for (const signal of ['SIGTERM', 'SIGINT'] as const)
+
+  for (const signal of ['SIGTERM', 'SIGINT'] as const) {
     process.prependOnceListener(signal, () => {
       app.get(RuntimeState).draining = true;
       server.closeIdleConnections?.();
       // The orchestrator can safely redeliver durable work after this deadline.
       setTimeout(() => process.exit(1), 30000).unref();
     });
+  }
+
   app.enableShutdownHooks();
+
   await app.listen(config.PORT, '0.0.0.0');
   return app;
 }
+
 if (require.main === module) void bootstrap();

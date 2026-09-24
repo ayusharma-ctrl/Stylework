@@ -1,5 +1,6 @@
 import { DataTypes as D, Model, Sequelize } from 'sequelize';
 import { id, required } from './attributes';
+
 export class Lead extends Model {
   declare id: string;
   declare source: string;

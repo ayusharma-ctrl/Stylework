@@ -20,6 +20,7 @@ import { DashboardCounter } from './dashboard-counter.model';
 export { DashboardCounter } from './dashboard-counter.model';
 
 export { WebhookCredential } from './webhook-credential.model';
+
 export function registerModels(sequelize: Sequelize) {
   User.register(sequelize);
   Session.register(sequelize);

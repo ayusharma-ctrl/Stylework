@@ -1,5 +1,6 @@
 import { DataTypes as D, Model, Sequelize } from 'sequelize';
 import { required } from './attributes';
+
 export class AppSettings extends Model {
   declare id: number;
   declare defaultStatusId: string;

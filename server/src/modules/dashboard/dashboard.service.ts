@@ -8,6 +8,7 @@ import { Telemetry } from '../../common/security/telemetry.service';
 import { canonicalJson, hash } from '../../common/crypto';
 import { dateKey } from '../events/counters.service';
 import { DashboardSnapshot } from './dashboard.types';
+
 @Injectable()
 export class DashboardService implements OnModuleInit, OnModuleDestroy {
   private subscriber?: Redis;
@@ -21,7 +22,8 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
     private readonly db: DatabaseService,
     private readonly redis: RedisService,
     private readonly telemetry: Telemetry,
-  ) {}
+  ) { }
+
   async onModuleInit() {
     this.subscriber = this.redis.client.duplicate({ lazyConnect: true });
     this.subscriber.on('error', () => {
@@ -30,8 +32,10 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
     this.subscriber.on('message', () => {
       this.dirty = true;
     });
+
     await this.subscriber.connect();
     await this.subscriber.subscribe('sw:changes');
+
     this.timer = setInterval(() => {
       if (this.listeners.size && (this.dirty || Date.now() - this.cachedAt >= 30000)) {
         void this.snapshot()
@@ -42,11 +46,13 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
       }
     }, 1000);
   }
+
   subscribe(next: (value: DashboardSnapshot) => void, close: () => void) {
     const listener = { next, close };
     this.listeners.add(listener);
     return () => this.listeners.delete(listener);
   }
+
   snapshot() {
     if (this.cache && Date.now() - this.cachedAt < 1000) return Promise.resolve(this.cache);
     return (this.computing ||= this.compute()
@@ -59,6 +65,7 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
         this.computing = undefined;
       }));
   }
+
   private async compute(): Promise<DashboardSnapshot> {
     this.dirty = false;
     try {
@@ -66,6 +73,7 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
         { isolationLevel: Transaction.ISOLATION_LEVELS.REPEATABLE_READ, readOnly: true },
         async (transaction) => {
           const settings = (await AppSettings.findByPk(1, { transaction }))!;
+
           const statuses = await Status.findAll({
             order: [
               ['position', 'ASC'],
@@ -83,21 +91,26 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
           // Two independent index-top reads in one round trip; Sequelize cannot express this scalar subquery projection.
           const [latest] = await this.db.sequelize.query<{ revision: string }>(
             `SELECT concat(
-    (SELECT concat(updated_at::text,id::text) FROM leads ORDER BY updated_at DESC,id DESC LIMIT 1),':',
-    (SELECT concat(created_at::text,id::text) FROM activities ORDER BY created_at DESC,id DESC LIMIT 1)
-   ) AS revision`,
+            (SELECT concat(updated_at::text,id::text) FROM leads ORDER BY updated_at DESC,id DESC LIMIT 1),':',
+            (SELECT concat(created_at::text,id::text) FROM activities ORDER BY created_at DESC,id DESC LIMIT 1)
+            ) AS revision`,
             { type: QueryTypes.SELECT, transaction },
           );
-          const today = dateKey(new Date(), settings.timezone),
-            calendar = new Date(today + 'T00:00:00Z');
+
+          const today = dateKey(new Date(), settings.timezone);
+          const calendar = new Date(today + 'T00:00:00Z');
+
           calendar.setUTCDate(calendar.getUTCDate() - 1);
+
           const yesterday = calendar.toISOString().slice(0, 10);
-          const total = values.get('total') || 0,
-            todayCount = values.get('day:' + today) || 0,
-            yesterdayCount = values.get('day:' + yesterday) || 0;
+          const total = values.get('total') || 0;
+          const todayCount = values.get('day:' + today) || 0;
+          const yesterdayCount = values.get('day:' + yesterday) || 0;
+
           const difference = yesterdayCount
             ? Math.round(((todayCount - yesterdayCount) / yesterdayCount) * 1000) / 10
             : null;
+
           const trend = Array.from({ length: 14 }, (_, i) => {
             const date = new Date(today + 'T00:00:00Z');
             date.setUTCDate(date.getUTCDate() - (13 - i));
@@ -108,6 +121,7 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
               value: values.get('day:' + key) || 0,
             };
           });
+
           return {
             generatedAt: new Date().toISOString(),
             timezone: settings.timezone,
@@ -167,6 +181,7 @@ export class DashboardService implements OnModuleInit, OnModuleDestroy {
       throw error;
     }
   }
+
   onModuleDestroy() {
     if (this.timer) clearInterval(this.timer);
     for (const listener of this.listeners) listener.close();

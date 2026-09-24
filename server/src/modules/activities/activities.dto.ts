@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { paginationShape, validPaging } from '../../common/pagination';
+
 export const activityTypes = [
   'LEAD_CREATED',
   'LEAD_UPDATED',
@@ -9,6 +10,7 @@ export const activityTypes = [
   'STATUS_ARCHIVED',
   'DEFAULT_STATUS_CHANGED',
 ] as const;
+
 export const activityQuerySchema = z
   .object({
     ...paginationShape,
@@ -21,7 +23,9 @@ export const activityQuerySchema = z
   })
   .strict()
   .refine(validPaging, 'Invalid pagination or date range');
+
 export type ActivityQuery = z.infer<typeof activityQuerySchema>;
+
 export interface ActivityView {
   id: string;
   leadId: string | null;

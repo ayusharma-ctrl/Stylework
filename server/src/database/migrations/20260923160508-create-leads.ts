@@ -1,6 +1,5 @@
 import { QueryInterface, DataTypes as D, literal } from 'sequelize';
 
-// Schema is defined here rather than imported from mutable application models.
 export async function up(queryInterface: QueryInterface) {
   await queryInterface.sequelize.transaction(async (transaction) => {
     const options = { transaction };
@@ -22,6 +21,7 @@ export async function up(queryInterface: QueryInterface) {
     const index = (table: string, name: string, fields: any[], extra = {}) =>
       queryInterface.addIndex(table, fields, { name, ...extra, transaction });
     const descending = (name: string) => ({ name, order: 'DESC' });
+
     await queryInterface.createTable(
       'leads',
       {
@@ -43,21 +43,25 @@ export async function up(queryInterface: QueryInterface) {
       },
       options,
     );
+
     await queryInterface.addConstraint('leads', {
       fields: ['source', 'external_id'],
       name: 'leads_source_external_id_key',
       type: 'unique',
       transaction,
     });
+
     await check('leads', 'leads_source_version_check', ['source_version'], 'source_version>0');
     await check('leads', 'leads_version_check', ['version'], 'version>0');
     await check('leads', 'leads_check', ['email', 'phone'], 'email IS NOT NULL OR phone IS NOT NULL');
     await check('leads', 'leads_metadata_check', ['metadata'], "jsonb_typeof(metadata)='object'");
+
     await queryInterface.sequelize.query(
       `ALTER TABLE leads ADD COLUMN search_text text GENERATED ALWAYS AS
       (lower(full_name || ' ' || coalesce(email,'') || ' ' || coalesce(phone,'') || ' ' || coalesce(company,'') || ' ' || coalesce(campaign,''))) STORED`,
       options,
     );
+
     await index('leads', 'leads_created', [descending('created_at'), descending('id')]);
     await index('leads', 'leads_status_created', ['status_id', descending('created_at'), descending('id')]);
     await index('leads', 'leads_updated', [descending('updated_at'), descending('id')]);

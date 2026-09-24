@@ -6,17 +6,20 @@ import { RedisService } from '../../common/security/redis.service';
 import { Telemetry } from '../../common/security/telemetry.service';
 import { AuthService } from '../auth/auth.service';
 import { DashboardService } from './dashboard.service';
+
 const acquire = `
 local t=redis.call('TIME');local now=t[1]*1000+math.floor(t[2]/1000)
 redis.call('ZREMRANGEBYSCORE',KEYS[1],'-inf',now)
 if redis.call('ZCARD',KEYS[1])>=tonumber(ARGV[2]) then return 0 end
 redis.call('ZADD',KEYS[1],now+30000,ARGV[1]);redis.call('PEXPIRE',KEYS[1],60000);return 1
 `;
+
 const renew = `
 local t=redis.call('TIME');local now=t[1]*1000+math.floor(t[2]/1000)
 if not redis.call('ZSCORE',KEYS[1],ARGV[1]) then return 0 end
 redis.call('ZADD',KEYS[1],now+30000,ARGV[1]);redis.call('PEXPIRE',KEYS[1],60000);return 1
 `;
+
 @Controller('dashboard')
 export class DashboardController {
   constructor(
@@ -24,27 +27,33 @@ export class DashboardController {
     private readonly redis: RedisService,
     private readonly auth: AuthService,
     private readonly telemetry: Telemetry,
-  ) {}
+  ) { }
+
   @Get('stream')
   async stream(@Req() req: ApiRequest, @Res() res: Response) {
-    const key = 'sw:sse:' + req.principal!.id,
-      token = randomUUID();
+    const key = 'sw:sse:' + req.principal!.id;
+    const token = randomUUID();
+
     let granted: unknown;
+
     try {
       granted = await this.redis.client.eval(acquire, 1, key, token, 3);
     } catch {
       throw new ServiceUnavailableException('Stream coordination unavailable');
     }
+
     if (!granted) {
       res.setHeader('Retry-After', '15');
       throw new HttpException('Too many active streams', 429);
     }
-    let closed = false,
-      heartbeat: NodeJS.Timeout | undefined,
-      lifetime: NodeJS.Timeout | undefined,
-      unsubscribe: () => unknown = () => {},
-      counted = false,
-      lastRevision = '';
+
+    let closed = false;
+    let heartbeat: NodeJS.Timeout | undefined;
+    let lifetime: NodeJS.Timeout | undefined;
+    let unsubscribe: () => unknown = () => { };
+    let counted = false;
+    let lastRevision = '';
+
     const close = () => {
       if (closed) return;
       closed = true;
@@ -52,35 +61,45 @@ export class DashboardController {
       if (lifetime) clearTimeout(lifetime);
       unsubscribe();
       if (counted) this.telemetry.streams.dec();
-      void this.redis.client.zrem(key, token).catch(() => {});
+      void this.redis.client.zrem(key, token).catch(() => { });
       if (res.headersSent) res.end();
     };
+
     res.once('close', close);
+
     const write = (text: string) => {
       if (!closed && !res.write(text)) {
         close();
         res.destroy();
       }
     };
+
     try {
       const initial = await this.dashboard.snapshot();
       if (closed) return;
+
       res.setHeader('Content-Type', 'text/event-stream');
       res.setHeader('Cache-Control', 'no-cache, no-transform');
       res.setHeader('Connection', 'keep-alive');
       res.setHeader('X-Accel-Buffering', 'no');
       res.flushHeaders();
+
       this.telemetry.streams.inc();
       counted = true;
+
       const send = (snapshot: typeof initial) => {
         if (snapshot.revision !== lastRevision) {
           lastRevision = snapshot.revision;
           write('id: ' + snapshot.revision + '\ndata: ' + JSON.stringify(snapshot) + '\n\n');
         }
       };
+
       send(initial);
+
       unsubscribe = this.dashboard.subscribe(send, close);
+
       let checking = false;
+
       heartbeat = setInterval(() => {
         if (checking) return;
         checking = true;
@@ -97,6 +116,7 @@ export class DashboardController {
             checking = false;
           });
       }, 15000);
+
       lifetime = setTimeout(close, 5 * 60000);
     } catch (error) {
       close();

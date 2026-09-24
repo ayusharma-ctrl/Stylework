@@ -25,3 +25,5 @@
 .github/
 AGENT.md
 AGENTS.md
+architecture.md
+docker-compose.local.yml

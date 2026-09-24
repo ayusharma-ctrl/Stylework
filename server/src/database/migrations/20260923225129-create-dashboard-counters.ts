@@ -1,6 +1,5 @@
 import { QueryInterface, DataTypes as D, literal } from 'sequelize';
 
-// Schema is defined here rather than imported from mutable application models.
 export async function up(queryInterface: QueryInterface) {
   await queryInterface.sequelize.transaction(async (transaction) => {
     const options = { transaction };
@@ -13,6 +12,7 @@ export async function up(queryInterface: QueryInterface) {
         where: literal(expression),
         transaction,
       });
+
     await queryInterface.createTable(
       'dashboard_counters',
       {
@@ -23,6 +23,7 @@ export async function up(queryInterface: QueryInterface) {
       },
       options,
     );
+
     await check('dashboard_counters', 'dashboard_counters_shard_check', ['shard'], 'shard>=0 AND shard<64');
     await check('dashboard_counters', 'dashboard_counters_value_check', ['value'], 'value>=0');
   });

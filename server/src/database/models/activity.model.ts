@@ -1,5 +1,6 @@
 import { DataTypes as D, Model, Sequelize } from 'sequelize';
 import { id, required } from './attributes';
+
 export class Activity extends Model {
   declare id: string;
   declare leadId: string | null;

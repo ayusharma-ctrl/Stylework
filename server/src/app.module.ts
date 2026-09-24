@@ -15,6 +15,7 @@ import { LeadsModule } from './modules/leads/leads.module';
 import { ActivitiesModule } from './modules/activities/activities.module';
 import { StatusesModule } from './modules/statuses/statuses.module';
 import { DashboardModule } from './modules/dashboard/dashboard.module';
+
 @Module({
   imports: [
     DatabaseModule,
@@ -35,4 +36,5 @@ import { DashboardModule } from './modules/dashboard/dashboard.module';
     { provide: APP_FILTER, useClass: ErrorFilter },
   ],
 })
+
 export class AppModule {}

@@ -1,6 +1,5 @@
 import { QueryInterface, DataTypes as D, literal } from 'sequelize';
 
-// Schema is defined here rather than imported from mutable application models.
 export async function up(queryInterface: QueryInterface) {
   await queryInterface.sequelize.transaction(async (transaction) => {
     const options = { transaction };
@@ -18,6 +17,7 @@ export async function up(queryInterface: QueryInterface) {
     const index = (table: string, name: string, fields: any[], extra = {}) =>
       queryInterface.addIndex(table, fields, { name, ...extra, transaction });
     const descending = (name: string) => ({ name, order: 'DESC' });
+
     await queryInterface.createTable(
       'activities',
       {
@@ -36,13 +36,16 @@ export async function up(queryInterface: QueryInterface) {
       },
       options,
     );
+
     await check(
       'activities',
       'activities_entity_type_check',
       ['entity_type'],
       "entity_type IN ('lead','status')",
     );
+
     await index('activities', 'activities_created', [descending('created_at'), descending('id')]);
+
     for (const [name, field] of [
       ['lead', 'lead_id'],
       ['type', 'type'],
@@ -54,11 +57,12 @@ export async function up(queryInterface: QueryInterface) {
         descending('id'),
       ]);
     }
-    // QueryInterface cannot attach an operator class to a function index expression.
+
     await queryInterface.sequelize.query(
       'CREATE INDEX activities_search ON activities USING gin(lower(summary) gin_trgm_ops)',
       options,
     );
+
     await queryInterface.sequelize.query(
       `CREATE FUNCTION reject_activity_mutation() RETURNS trigger LANGUAGE plpgsql AS $$
       BEGIN RAISE EXCEPTION 'Activity records are immutable'; END; $$;

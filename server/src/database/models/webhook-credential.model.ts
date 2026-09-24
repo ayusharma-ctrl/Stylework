@@ -1,5 +1,6 @@
 import { DataTypes as D, Model, Sequelize } from 'sequelize';
 import { id, required } from './attributes';
+
 export class WebhookCredential extends Model {
   declare id: string;
   declare name: string;

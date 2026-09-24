@@ -8,7 +8,9 @@ import { Outbox, Receipt } from '../../database/models';
 import { RedisService } from '../../common/security/redis.service';
 import { Telemetry } from '../../common/security/telemetry.service';
 import { LeadProcessor } from './lead-processor.service';
+
 export const QUEUE_NAME = 'stylework-leads';
+
 @Injectable()
 export class JobsService implements OnModuleInit, OnModuleDestroy {
   private queue!: Queue;
@@ -24,29 +26,36 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     private readonly redis: RedisService,
     private readonly processor: LeadProcessor,
     private readonly telemetry: Telemetry,
-  ) {}
+  ) { }
+
   async onModuleInit() {
     this.queue = new Queue(QUEUE_NAME, { connection: this.redis.client as any });
     this.workerRedis = new Redis(config.REDIS_URL, { maxRetriesPerRequest: null });
-    this.workerRedis.on('error', () => {});
+    this.workerRedis.on('error', () => { });
+
     this.worker = new Worker(QUEUE_NAME, (job) => this.processor.process(job.data.receiptId), {
       connection: this.workerRedis as any,
       concurrency: config.WORKER_CONCURRENCY,
       lockDuration: 30000,
     });
+
     this.worker.on('error', (error) =>
       this.telemetry.log.warn({ errorType: error.name }, 'queue connection or lease error'),
     );
+
     this.worker.on('failed', (job) =>
       this.telemetry.log.warn(
         { receiptId: job?.data.receiptId, attempt: job?.attemptsMade },
         'queue job failed',
       ),
     );
+
     await this.queue.waitUntilReady();
+
     this.timer = setInterval(() => this.tick(), 1000);
     this.tick();
   }
+
   private options(id: string) {
     return {
       jobId: id,
@@ -56,6 +65,7 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
       removeOnFail: { age: 604800, count: 1000 },
     };
   }
+
   private async enqueue(receiptId: string, recovery = false) {
     if (recovery) {
       const existing = await this.queue.getJob(receiptId);
@@ -67,6 +77,7 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     }
     await this.queue.add('lead-upsert', { receiptId }, this.options(receiptId));
   }
+
   private tick() {
     if (this.stopping || this.running) return;
     this.running = this.dispatch()
@@ -87,6 +98,7 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
         this.running = undefined;
       });
   }
+
   async dispatch() {
     await this.db.sequelize.transaction(async (transaction) => {
       const rows = await Outbox.findAll({
@@ -97,6 +109,7 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
         lock: transaction.LOCK.UPDATE,
         skipLocked: true,
       });
+
       for (const row of rows) {
         if (row.kind === 'process') {
           await this.enqueue(row.receiptId!);
@@ -104,11 +117,15 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
             { lastEnqueuedAt: new Date() },
             { where: { id: row.receiptId!, state: 'pending' }, transaction },
           );
-        } else await this.redis.client.publish('sw:changes', JSON.stringify({ id: row.id, ...row.payload }));
+        } else {
+          await this.redis.client.publish('sw:changes', JSON.stringify({ id: row.id, ...row.payload }));
+        }
+
         await row.update({ publishedAt: new Date() }, { transaction });
       }
     });
   }
+
   async reconcile() {
     await this.db.sequelize.transaction(async (transaction) => {
       const receipts = await Receipt.findAll({
@@ -123,12 +140,14 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
         lock: transaction.LOCK.UPDATE,
         skipLocked: true,
       });
+
       for (const receipt of receipts) {
         await this.enqueue(receipt.id, true);
         await receipt.update({ lastEnqueuedAt: new Date() }, { transaction });
       }
     });
   }
+
   private async observe() {
     const row = await Receipt.findOne({
       attributes: [[fn('count', col('id')), 'count'], [fn('min', col('created_at')), 'oldest']],
@@ -140,13 +159,18 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     this.telemetry.queueAge.set(Math.max(0, age));
 
   }
+
   stop() {
     return (this.stopped ||= (async () => {
       this.stopping = true;
+
       if (this.timer) clearInterval(this.timer);
+
       await this.running;
+
       if (this.worker) {
         let timer: NodeJS.Timeout | undefined;
+
         try {
           await Promise.race([
             this.worker.close(),
@@ -160,10 +184,13 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
           if (timer) clearTimeout(timer);
         }
       }
+
       if (this.queue) await this.queue.close();
+
       this.workerRedis?.disconnect();
     })());
   }
+
   onModuleDestroy() {
     return this.stop();
   }

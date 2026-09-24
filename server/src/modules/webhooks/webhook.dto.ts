@@ -1,10 +1,12 @@
 import { z } from 'zod';
 import { canonicalJson } from '../../common/crypto';
+
 export const eventIdSchema = z
   .string()
   .min(1)
   .max(128)
   .regex(/^[a-zA-Z0-9._-]+$/);
+
 export const leadDataSchema = z
   .object({
     fullName: z.string().trim().min(1).max(160),
@@ -30,6 +32,7 @@ export const leadDataSchema = z
   })
   .strict()
   .refine((v) => !!(v.email || v.phone), 'At least one contact method is required');
+
 export const webhookSchema = z
   .object({
     eventId: eventIdSchema,
@@ -39,4 +42,5 @@ export const webhookSchema = z
     data: leadDataSchema,
   })
   .strict();
+
 export type WebhookDto = z.infer<typeof webhookSchema>;

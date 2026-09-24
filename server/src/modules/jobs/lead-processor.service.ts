@@ -8,6 +8,7 @@ import { AuditService } from '../events/audit.service';
 import { CountersService } from '../events/counters.service';
 import { OutboxService } from '../events/outbox.service';
 import { webhookSchema } from '../webhooks/webhook.dto';
+
 @Injectable()
 export class LeadProcessor {
   constructor(
@@ -16,7 +17,8 @@ export class LeadProcessor {
     private readonly counters: CountersService,
     private readonly outbox: OutboxService,
     private readonly telemetry: Telemetry,
-  ) {}
+  ) { }
+
   private async fail(receipt: Receipt, code: string, message: string, transaction: Transaction) {
     await receipt.update(
       { state: 'failed', errorCode: code, errorMessage: message, processedAt: new Date() },
@@ -24,12 +26,16 @@ export class LeadProcessor {
     );
     this.telemetry.failures.inc({ code });
   }
+
   async process(receiptId: string) {
     try {
       return await this.db.sequelize.transaction(async (transaction) => {
         const receipt = await Receipt.findByPk(receiptId, { transaction, lock: transaction.LOCK.UPDATE });
+
         if (!receipt || receipt.state !== 'pending') return;
+
         await receipt.update({ attempts: receipt.attempts + 1 }, { transaction });
+
         if (receipt.attempts > 8) {
           await this.fail(
             receipt,
@@ -39,7 +45,9 @@ export class LeadProcessor {
           );
           return;
         }
+
         const parsed = webhookSchema.safeParse(receipt.payload);
+
         if (!parsed.success) {
           await this.fail(
             receipt,
@@ -47,19 +55,24 @@ export class LeadProcessor {
             'Stored event does not match the supported schema',
             transaction,
           );
+
           return;
         }
-        const event = parsed.data,
-          sourceHash = hash(canonicalJson(event.data));
+
+        const event = parsed.data;
+        const sourceHash = hash(canonicalJson(event.data));
+
         await this.db.sequelize.query('SELECT pg_advisory_xact_lock(hashtextextended(:key,0))', {
           replacements: { key: 'lead:' + receipt.source + ':' + event.externalLeadId },
           transaction,
         });
+
         let lead = await Lead.findOne({
           where: { source: receipt.source, externalId: event.externalLeadId },
           transaction,
           lock: transaction.LOCK.UPDATE,
         });
+
         if (
           lead &&
           (event.version < lead.sourceVersion ||
@@ -75,8 +88,10 @@ export class LeadProcessor {
             },
             { transaction },
           );
+
           return;
         }
+
         if (lead && event.version === lead.sourceVersion) {
           await this.fail(
             receipt,
@@ -84,16 +99,22 @@ export class LeadProcessor {
             'Same source version contains different lead data',
             transaction,
           );
+
           return;
         }
+
         const actor = receipt.actor || { kind: 'webhook', label: 'Meta webhook' };
+
         if (!lead) {
           const settings = await AppSettings.findByPk(1, { transaction, lock: transaction.LOCK.SHARE });
+
           const status = await Status.findByPk(settings!.defaultStatusId, {
             transaction,
             lock: transaction.LOCK.SHARE,
           });
+
           if (!status || status.archivedAt) throw new Error('Default status unavailable');
+
           lead = await Lead.create(
             {
               ...event.data,
@@ -107,6 +128,7 @@ export class LeadProcessor {
             },
             { transaction },
           );
+
           await this.audit.record(transaction, {
             entityId: lead.id,
             leadId: lead.id,
@@ -118,6 +140,7 @@ export class LeadProcessor {
             after: { ...event.data, status: { id: status.id, name: status.name } },
             requestId: receipt.requestId,
           });
+
           await this.counters.created(transaction, lead.id, status.id, lead.createdAt, settings!.timezone);
         } else {
           const before = {
@@ -128,7 +151,9 @@ export class LeadProcessor {
             campaign: lead.campaign,
             metadata: lead.metadata,
           };
+
           const changed = sourceHash !== lead.sourceHash;
+
           await lead.update(
             {
               ...event.data,
@@ -139,6 +164,7 @@ export class LeadProcessor {
             },
             { transaction },
           );
+
           if (changed)
             await this.audit.record(transaction, {
               entityId: lead.id,
@@ -153,6 +179,7 @@ export class LeadProcessor {
               requestId: receipt.requestId,
             });
         }
+
         await receipt.update(
           {
             state: 'processed',
@@ -163,6 +190,7 @@ export class LeadProcessor {
           },
           { transaction },
         );
+
         await this.outbox.notify(transaction, {
           kind: 'lead',
           leadId: lead.id,
@@ -173,8 +201,9 @@ export class LeadProcessor {
       // The failed business transaction has rolled back. Persist retry state independently.
       const current = await Receipt.findByPk(receiptId).catch(() => null);
       if (current?.state === 'pending') {
-        const attempts = current.attempts + 1,
-          exhausted = attempts >= 8;
+        const attempts = current.attempts + 1;
+        const exhausted = attempts >= 8;
+
         await Receipt.update(
           {
             attempts,
@@ -188,7 +217,9 @@ export class LeadProcessor {
           { where: { id: receiptId, state: 'pending' } },
         );
       }
+
       this.telemetry.failures.inc({ code: 'PROCESSING_RETRY' });
+
       this.telemetry.log.error(
         {
           receiptId,
@@ -197,6 +228,7 @@ export class LeadProcessor {
         },
         'worker transaction failed',
       );
+
       throw error;
     }
   }

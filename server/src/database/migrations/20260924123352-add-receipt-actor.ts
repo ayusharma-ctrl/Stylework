@@ -11,7 +11,9 @@ export async function up(queryInterface: QueryInterface) {
       },
       { transaction },
     );
+
     await queryInterface.addColumn('webhook_receipts', 'actor', { type: D.JSONB }, { transaction });
+
     await queryInterface.addConstraint('webhook_receipts', {
       fields: ['actor'],
       name: 'receipt_actor_object',

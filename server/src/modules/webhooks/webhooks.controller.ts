@@ -7,9 +7,11 @@ import { ZodPipe } from '../../common/zod.pipe';
 import { eventIdSchema, webhookSchema, WebhookDto } from './webhook.dto';
 import { WebhooksService } from './webhooks.service';
 import { WebhookGuard } from './webhook.guard';
+
 @Controller()
 export class WebhooksController {
-  constructor(private readonly service: WebhooksService) {}
+  constructor(private readonly service: WebhooksService) { }
+
   @Public()
   @UseGuards(WebhookGuard)
   @Post('webhook/meta-lead')
@@ -22,6 +24,7 @@ export class WebhooksController {
     res.status(result.duplicate ? 200 : 202);
     return result;
   }
+
   @Get('webhook-events/:eventId')
   outcome(
     @Param('eventId', new ZodPipe(eventIdSchema)) eventId: string,

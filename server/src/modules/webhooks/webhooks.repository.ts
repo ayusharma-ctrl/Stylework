@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { Transaction } from 'sequelize';
 import { Receipt } from '../../database/models';
+
 @Injectable()
 export class WebhooksRepository {
   find(eventId: string, transaction?: Transaction, source = 'meta') {
@@ -10,6 +11,7 @@ export class WebhooksRepository {
       ...(transaction ? { lock: transaction.LOCK.UPDATE } : {}),
     });
   }
+
   safe(receipt: Receipt) {
     return {
       receiptId: receipt.id,

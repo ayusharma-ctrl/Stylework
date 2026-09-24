@@ -1,10 +1,12 @@
 import 'dotenv/config';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
+
 const arg = (name) => {
   const i = process.argv.indexOf(name);
   return i >= 0 ? process.argv[i + 1] : undefined;
 };
+
 const body = arg('--file')
   ? await readFile(arg('--file'), 'utf8')
   : JSON.stringify({
@@ -20,15 +22,20 @@ const body = arg('--file')
         campaign: 'Founder community',
       },
     });
+
 const key = process.env.WEBHOOK_KEY;
+
 if (!key)
   throw new Error(
     'Set WEBHOOK_KEY to a credential created/imported with npm run webhook:key. This is client input; the server verifies PostgreSQL.',
   );
+
 const response = await fetch((process.env.API_URL || 'http://localhost:3000') + '/webhook/meta-lead', {
   method: 'POST',
   headers: { 'Content-Type': 'application/json', 'X-Webhook-Key': key },
   body,
 });
+
 console.log(response.status, await response.text());
+
 if (!response.ok) process.exitCode = 1;

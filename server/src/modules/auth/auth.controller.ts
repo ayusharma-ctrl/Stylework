@@ -4,15 +4,18 @@ import { ApiRequest } from '../../common/http.types';
 import { ZodPipe } from '../../common/zod.pipe';
 import { AuthService } from './auth.service';
 import { signinSchema, SigninDto } from './auth.dto';
+
 @Controller()
 export class AuthController {
-  constructor(private readonly auth: AuthService) {}
+  constructor(private readonly auth: AuthService) { }
+
   @Public()
   @Post('signin')
   @HttpCode(200)
   signin(@Body(new ZodPipe(signinSchema)) body: SigninDto) {
     return this.auth.signin(body.email);
   }
+
   @Post('signout')
   @HttpCode(200)
   signout(@Req() req: ApiRequest) {

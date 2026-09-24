@@ -12,6 +12,7 @@ import { ApiRequest } from '../http.types';
 import { RateLimiter } from './rate-limiter.service';
 import { RuntimeState } from './runtime-state';
 import { Telemetry } from './telemetry.service';
+
 @Injectable()
 export class RequestMiddleware {
   private inflight = 0;
@@ -20,11 +21,13 @@ export class RequestMiddleware {
     private readonly limiter: RateLimiter,
     private readonly state: RuntimeState,
     private readonly telemetry: Telemetry,
-  ) {}
+  ) { }
+
   use = async (req: ApiRequest, res: Response, next: NextFunction) => {
     req.requestId = randomUUID();
     res.setHeader('X-Request-ID', req.requestId);
     const started = performance.now();
+
     res.once('finish', () => {
       const route = typeof req.route?.path === 'string' ? req.route.path : 'unmatched';
       this.telemetry.requests.inc({ method: req.method, route, status: String(res.statusCode) });
@@ -41,35 +44,47 @@ export class RequestMiddleware {
           'request completed',
         );
     });
+
     try {
       if (req.path === '/health/live' || req.path === '/health/ready') return next();
       if (this.state.draining) throw new ServiceUnavailableException('Server is draining');
+
       const origin = req.headers.origin;
+
       if (origin && !this.origins.has(origin)) throw new ForbiddenException('Origin is not allowed');
       if (req.method === 'OPTIONS') return next();
+
       // Bound queued database work as well as arrival rate. SSE has its own distributed cap.
       if (req.path !== '/dashboard/stream') {
-        if (this.inflight >= config.MAX_INFLIGHT_REQUESTS)
+        if (this.inflight >= config.MAX_INFLIGHT_REQUESTS) {
           throw new ServiceUnavailableException({
             code: 'SERVER_BUSY',
             message: 'Server is busy; retry shortly',
           });
+        }
+
         this.inflight++;
         let released = false;
+
         const release = () => {
           if (!released) {
             released = true;
             this.inflight--;
           }
         };
+
         res.once('finish', release);
         res.once('close', release);
       }
-      if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method) && !req.is('application/json'))
+
+      if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method) && !req.is('application/json')) {
         throw new UnsupportedMediaTypeException('Content-Type must be application/json');
+      }
+
       const ip = req.ip || req.socket.remoteAddress || 'unknown';
       // Only this exact endpoint gets the webhook policy; headers cannot select a larger quota.
       const webhook = req.path.toLowerCase().replace(/\/+$/, '') === '/webhook/meta-lead';
+
       await this.limiter.consume(
         webhook ? 'webhook-ip' : 'api-ip',
         ip,
@@ -77,6 +92,7 @@ export class RequestMiddleware {
         60000,
         res,
       );
+
       next();
     } catch (error) {
       const status = error instanceof HttpException ? error.getStatus() : 503;
@@ -85,7 +101,9 @@ export class RequestMiddleware {
         typeof detail === 'object'
           ? (detail as any)
           : { message: typeof detail === 'string' ? detail : 'Service temporarily unavailable' };
+
       if (status === 503) res.setHeader('Retry-After', '2');
+
       res.status(status).json({
         error: { code: body.code || 'REQUEST_REJECTED', message: body.message },
         meta: { requestId: req.requestId },

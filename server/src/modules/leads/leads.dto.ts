@@ -1,9 +1,11 @@
 import { z } from 'zod';
 import { paginationShape, validPaging } from '../../common/pagination';
+
 const ids = z.preprocess(
   (v) => (typeof v === 'string' ? v.split(',') : v),
   z.array(z.uuid()).max(50).optional(),
 );
+
 export const leadQuerySchema = z
   .object({
     ...paginationShape,
@@ -13,7 +15,9 @@ export const leadQuerySchema = z
   })
   .strict()
   .refine(validPaging, 'Invalid pagination or date range');
+
 export type LeadQuery = z.infer<typeof leadQuerySchema>;
+
 export interface LeadView {
   id: string;
   source: string;

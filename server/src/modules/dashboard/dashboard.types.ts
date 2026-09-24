@@ -5,6 +5,7 @@ export interface DashboardMetric {
   format: 'number' | 'percent';
   description: string;
 }
+
 export interface DashboardSnapshot {
   generatedAt: string;
   timezone: string;

@@ -21,17 +21,25 @@ const schema = z.object({
   WEBHOOK_RATE_LIMIT: z.coerce.number().int().positive().default(60),
   RUN_WORKER: z.enum(['true', 'false']).default('true').transform(value => value === 'true'),
 });
+
 export function parseConfig(env: NodeJS.ProcessEnv) {
   const value = schema.parse(env);
-  if (value.ACCESS_TOKEN_SECRET === value.REFRESH_TOKEN_SECRET)
+
+  if (value.ACCESS_TOKEN_SECRET === value.REFRESH_TOKEN_SECRET) {
     throw new Error('Access and refresh signing secrets must differ');
+  }
+
   if (value.NODE_ENV === 'production') {
     for (const key of ['ACCESS_TOKEN_SECRET', 'REFRESH_TOKEN_SECRET', 'METRICS_TOKEN'] as const) {
       if (!env[key] || value[key].startsWith('local-')) throw new Error(key + ' must be configured securely');
     }
-    if (!env.DATABASE_URL || !env.REDIS_URL || !env.CLIENT_ORIGINS)
+
+    if (!env.DATABASE_URL || !env.REDIS_URL || !env.CLIENT_ORIGINS) {
       throw new Error('Production connection URLs and origins are required');
+    }
   }
+
   return Object.freeze(value);
 }
+
 export const config = parseConfig(process.env);

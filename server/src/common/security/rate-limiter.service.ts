@@ -2,6 +2,7 @@ import { HttpException, Injectable, ServiceUnavailableException } from '@nestjs/
 import { Response } from 'express';
 import { hash } from '../crypto';
 import { RedisService } from './redis.service';
+
 const bucket = `
 local time=redis.call('TIME')
 local now=time[1]*1000+math.floor(time[2]/1000)
@@ -17,9 +18,11 @@ redis.call('HSET',KEYS[1],'tokens',tokens,'time',now)
 redis.call('PEXPIRE',KEYS[1],math.ceil(window*capacity/tonumber(ARGV[3])*2))
 return delay
 `;
+
 @Injectable()
 export class RateLimiter {
-  constructor(private readonly redis: RedisService) {}
+  constructor(private readonly redis: RedisService) { }
+
   async consume(
     scope: string,
     identity: string,
@@ -46,6 +49,7 @@ export class RateLimiter {
         message: 'Service temporarily unavailable; retry shortly',
       });
     }
+
     if (retry > 0) {
       response?.setHeader('Retry-After', String(Math.max(1, Math.ceil(retry / 1000))));
       throw new HttpException({ code: 'RATE_LIMITED', message: 'Too many requests; retry later' }, 429);

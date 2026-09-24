@@ -12,9 +12,11 @@ export function dateKey(date: Date, timeZone: string) {
   const part = (type: string) => parts.find((p) => p.type === type)!.value;
   return part('year') + '-' + part('month') + '-' + part('day');
 }
+
 export function shardFor(id: string) {
   return parseInt(id.replaceAll('-', '').slice(-2), 16) % 64;
 }
+
 @Injectable()
 export class CountersService {
 
@@ -27,6 +29,7 @@ export class CountersService {
       await DashboardCounter.increment({ value: changes[key] }, { where: { key, shard }, transaction });
     }
   }
+
   created(transaction: Transaction, id: string, statusId: string, createdAt: Date, timezone: string) {
     return this.apply(transaction, id, {
       total: 1,
@@ -34,6 +37,7 @@ export class CountersService {
       ['day:' + dateKey(createdAt, timezone)]: 1,
     });
   }
+
   moved(transaction: Transaction, id: string, previous: string, next: string) {
     return previous === next
       ? Promise.resolve()

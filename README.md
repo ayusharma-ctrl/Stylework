@@ -4,8 +4,6 @@ A single-tenant lead intake application built with React and a modular NestJS mo
 
 **Local app:** http://localhost:5173 · **Local API:** http://localhost:3000
 
-**Live deployment:** pending owner publication. No hosted URL is claimed. Deployment configuration for Vercel, Render and Neon is included below.
-
 ## Architecture
 
 ```mermaid
@@ -33,10 +31,6 @@ flowchart LR
 - Status changes use `expectedVersion`; a concurrent stale edit gets 409. Status IDs remain stable, with soft archival and atomic default replacement. Existing leads, counts, filters and history remain intact.
 - Counters spread across 64 lead-ID shards. SSE computes consistent snapshots, sends dynamic cards/statuses, coalesces updates to once/second, and reconciles every 30 seconds. Reporting uses `Asia/Kolkata`; stored timestamps are UTC. A zero yesterday denominator produces `null`.
 
-The singleton `app_settings` row stores the default status, timezone and catalog revision. It has a database `CHECK(id=1)` and no tenant ownership or workspace relationships. Migration 20260924000000-rename-app-settings (formerly 003) renames the earlier settings table without losing configuration.
-
-See [architecture decisions](docs/architecture.md). Local AI guidance and progress files are intentionally excluded from Git.
-
 ## Setup instructions
 
 The frontend runs at **http://localhost:5173** and the backend at **http://localhost:3000**. Vite development and preview both use strict port 5173; the frontend Docker image also listens on 5173. The backend defaults to 3000, and Compose/Render explicitly set PORT=3000.
@@ -47,15 +41,15 @@ Copy `server/.env.example` to `server/.env`, then replace the placeholders with 
 
 | Setting | Value to supply |
 |---|---|
-| `DATABASE_URL` | Your Neon pooled PostgreSQL URL for API/background processing. |
-| `DATABASE_DIRECT_URL` | Your Neon direct URL for the **same database and branch**, used for migrations and maintenance. |
+| `DATABASE_URL` | Your pooled PostgreSQL URL for API/background processing. |
+| `DATABASE_DIRECT_URL` | Your direct URL for the **same database and branch**, used for migrations and maintenance. |
 | `REDIS_URL` | Your Redis provider's TCP URL: `rediss://user:password@host:port` for TLS, or `redis://...` where TLS is not used. An HTTPS REST URL will not work with BullMQ/ioredis. |
 | `PORT` | `3000` |
 | `CLIENT_ORIGINS` | `http://localhost:5173` for local development. |
 
 Copy `app/.env.example` to `app/.env`; keep `VITE_API_URL=http://localhost:3000`. Database credentials belong only in the server environment, never in Vite variables.
 
-Neon's pooled hostname contains `-pooler`; copy its direct connection separately from the Neon console. The migration runner holds a session-level advisory lock and therefore uses the direct URL. Keep TLS enabled; the example uses `sslmode=verify-full` for certificate and hostname verification. Redis must support regular TCP connections, Lua, BullMQ and the noeviction policy. See [Neon connection pooling](https://neon.com/docs/connect/connection-pooling).
+Pooled hostname contains `-pooler`; copy its direct connection separately from the console. The migration runner holds a session-level advisory lock and therefore uses the direct URL. Keep TLS enabled; the example uses `sslmode=verify-full` for certificate and hostname verification. Redis must support regular TCP connections, Lua, BullMQ and the noeviction policy.
 
 ### Run with Node
 
@@ -98,7 +92,7 @@ For offline/local development instead of hosted services, use the explicit overr
 docker compose -f docker-compose.yml -f docker-compose.local.yml up --build --wait
 ```
 
-This starts PostgreSQL on loopback port 5438 and Redis on loopback port 6388, with persistent volumes. It deliberately ignores `server/.env` for containers and supplies local URLs/development settings, so it cannot accidentally run its migration service against Neon. The app/API still use 5173/3000. Existing local volumes remain intact; `down` without `-v` preserves them.
+This starts PostgreSQL on loopback port 5438 and Redis on loopback port 6388, with persistent volumes. It deliberately ignores `server/.env` for containers and supplies local URLs/development settings, so it cannot accidentally run its migration service. The app/API still use 5173/3000. Existing local volumes remain intact; `down` without `-v` preserves them.
 
 To run only the test dependencies:
 
@@ -213,7 +207,7 @@ The Docker frontend uses [Nginx gzip](https://nginx.org/en/docs/http/ngx_http_gz
 
 ## Testing and capacity scope
 
-Hosted-URL/port configuration verification: both Compose variants validated; backend 25 unit tests and both Docker production builds passed. The optional local stack became healthy, served the app on 5173 and API on 3000, and passed the full webhook-to-dashboard smoke. Hosted Neon/Redis connectivity remains unverified until your actual URLs are configured.
+Hosted-URL/port configuration verification: both Compose variants validated; backend 25 unit tests and both Docker production builds passed. The optional local stack became healthy, served the app on 5173 and API on 3000, and passed the full webhook-to-dashboard smoke.
 
 September 25 deployment revision: backend build, 25 unit tests, 25 PostgreSQL/Redis integration scenarios, both Docker builds, two Chromium journeys at port 5173 and the combined-process webhook-to-dashboard smoke passed. Runtime checks confirmed no standalone worker container, a shared pool of four and concurrency one. Hosted Render deployment remains unverified.
 
@@ -238,8 +232,9 @@ The architecture aims to support millions of requests through bounded admission,
 
 ## Deployment steps
 
-1. Push this repository to your Git host. Provision Neon PostgreSQL in the same region as the services. Set the pooled connection as `DATABASE_URL` and the direct connection as `DATABASE_DIRECT_URL`, with TLS enabled. Migrations use the direct connection because their advisory lock is session-scoped. See [Neon pooling](https://neon.com/docs/connect/connection-pooling).
-2. Create a Render Blueprint using **Blueprint Path `server/render.yaml`**. It defines only one **free web service**. Supply your Neon pooled/direct URLs and Redis TCP/TLS URL, the exact frontend origin and deployment-specific trusted proxy ranges. The Blueprint sets PORT=3000; Render exposes the service through its normal public HTTPS URL. The database/Redis are not created by this Blueprint; Redis must support BullMQ connections/Lua and use noeviction. JWT/metrics secrets are generated on the service. API and processor run together with pool 4, concurrency 1 and a 256 MiB V8 heap cap (not a cap on total RSS). Migrations run before startup under the existing advisory lock because free web services have no paid pre-deploy hook. A failed migration prevents startup. Docker paths remain relative to the repository root even though the YAML moved. See [Blueprint fields](https://render.com/docs/blueprint-spec) and [deployment commands](https://render.com/docs/deploys).
+1. Push this repository to your Git host. Provision PostgreSQL in the same region as the services. Set the pooled connection as `DATABASE_URL` and the direct connection as `DATABASE_DIRECT_URL`, with TLS enabled. Migrations use the direct connection because their advisory lock is session-scoped.
+
+2. Create a Render Blueprint using **Blueprint Path `server/render.yaml`**. It defines only one **free web service**. Supply your pooled/direct URLs and Redis TCP/TLS URL, the exact frontend origin and deployment-specific trusted proxy ranges. The Blueprint sets PORT=3000; Render exposes the service through its normal public HTTPS URL. The database/Redis are not created by this Blueprint; Redis must support BullMQ connections/Lua and use noeviction. JWT/metrics secrets are generated on the service. API and processor run together with pool 4, concurrency 1 and a 256 MiB V8 heap cap (not a cap on total RSS). Migrations run before startup under the existing advisory lock because free web services have no paid pre-deploy hook. A failed migration prevents startup. Docker paths remain relative to the repository root even though the YAML moved. See [Blueprint fields](https://render.com/docs/blueprint-spec) and [deployment commands](https://render.com/docs/deploys).
 
 3. Import the repo into Vercel with **Root Directory `app`**, Node 24 and `VITE_API_URL=https://YOUR-API.onrender.com`. [app/vercel.json](app/vercel.json) supplies SPA rewrites and response headers. Set the resulting exact Vercel/custom origin in the API and redeploy. Avoid wildcard preview origins for a shared database. See [Vercel configuration](https://vercel.com/docs/project-configuration).
 4. Run the credential creation CLI locally with the production database connection; Render Free does not provide a service shell. Supply the resulting key only to the sender. Do not seed demo leads automatically in production. Explicit demonstration seeding requires `ALLOW_DEMO_SEED=true`.
