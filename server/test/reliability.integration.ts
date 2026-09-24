@@ -21,7 +21,6 @@ import { RateLimiter } from '../src/common/security/rate-limiter.service';
 import { WebhookCredentialsService } from '../src/modules/webhooks/webhook-credentials.service';
 import { DashboardService } from '../src/modules/dashboard/dashboard.service';
 import { AuthService } from '../src/modules/auth/auth.service';
-import { hash } from '../src/common/crypto';
 let app: NestExpressApplication,
   db: DatabaseService,
   processor: LeadProcessor,
@@ -53,7 +52,7 @@ const accept = (payload: any, key = credential.key) =>
 async function intake(payload: any) {
   const response = await accept(payload);
   expect(response.status).toBe(202);
-  return Receipt.findOne({ where: { eventId: payload.eventId } }).then((row) => row!);
+  return Receipt.findOne({ where: { source: 'meta', eventId: payload.eventId } }).then((row) => row!);
 }
 async function counts() {
   return db.sequelize.query<{ key: string; value: string }>(
@@ -308,22 +307,34 @@ describe('durability, ordering and retries', () => {
   });
 });
 describe('queries, configuration and live views', () => {
-  test('REST reads use read quotas and reject exhausted buckets', async () => {
-    const signed = await app.get(AuthService).signin('query-quota@example.test');
-    const requestHeaders = {
-      Authorization: 'Bearer ' + signed.tokens.accessToken,
-      'X-Refresh-Token': signed.tokens.refreshToken,
-    };
-    expect((await request(app.getHttpServer()).get('/leads?first=1').set(requestHeaders)).status).toBe(200);
-    const key = 'sw:rate:read-user:' + hash(signed.user.id);
-    expect(Number(await redis.client.hget(key, 'tokens'))).toBeGreaterThan(config.READ_USER_LIMIT - 2);
-    expect(await redis.client.exists('sw:rate:write-user:' + hash(signed.user.id))).toBe(0);
+  test('one IP quota spans REST routes, methods and identities while webhooks have a separate quota', async () => {
+    // No forwarded header is trusted in this test: requests use the real loopback address.
+    await request(app.getHttpServer()).get('/leads?first=1').set(headers());
+    const keys = await redis.client.keys('sw:rate:api-ip:*');
+    expect(keys).toHaveLength(1);
     const now = await redis.client.time();
-    await redis.client.hset(key, {
-      tokens: -100,
-      time: Number(now[0]) * 1000 + Math.floor(Number(now[1]) / 1000),
-    });
-    expect((await request(app.getHttpServer()).get('/activities').set(requestHeaders)).status).toBe(429);
+    try {
+      await redis.client.hset(keys[0]!, {
+        tokens: -10000,
+        time: Number(now[0]) * 1000 + Math.floor(Number(now[1]) / 1000),
+      });
+      for (const response of [
+        await request(app.getHttpServer()).get('/activities').set(headers()),
+        await request(app.getHttpServer())
+          .post('/signin')
+          .set('X-Forwarded-For', '203.0.113.1')
+          .send({ email: 'different@example.test' }),
+        await request(app.getHttpServer()).patch('/me').set(headers()).send({ theme: 'light' }),
+      ]) {
+        expect(response.status).toBe(429);
+        expect(Number(response.headers['retry-after'])).toBeGreaterThan(0);
+      }
+      const response = await accept(event());
+      expect(response.status).toBe(202);
+      await processor.process(response.body.data.receiptId);
+    } finally {
+      await redis.client.del(...keys);
+    }
   });
   test('REST bidirectional paging, filters, sort and schema bounds', async () => {
     const get = (path: string, input: any = {}) =>
@@ -413,20 +424,23 @@ describe('queries, configuration and live views', () => {
     await processor.process(external.id);
     expect(await Lead.count({ where: { externalId: payload.externalLeadId } })).toBe(2);
   });
-  test('manual intake shares mutation quotas and rejects compressed requests', async () => {
-    const signed = await app.get(AuthService).signin('manual-quota@example.test');
-    const h = {
-      Authorization: 'Bearer ' + signed.tokens.accessToken,
-      'X-Refresh-Token': signed.tokens.refreshToken,
-    };
+  test('manual and keyed webhook requests share the webhook IP limit without header bypasses', async () => {
+    const keys = await redis.client.keys('sw:rate:webhook-ip:*');
+    expect(keys).toHaveLength(1);
     const now = await redis.client.time();
-    await redis.client.hset('sw:rate:write-user:' + hash(signed.user.id), {
-      tokens: -100,
-      time: Number(now[0]) * 1000 + Math.floor(Number(now[1]) / 1000),
-    });
-    expect((await request(app.getHttpServer()).post('/webhook/meta-lead').set(h).send(event())).status).toBe(
-      429,
-    );
+    try {
+      await redis.client.hset(keys[0]!, {
+        tokens: -10000,
+        time: Number(now[0]) * 1000 + Math.floor(Number(now[1]) / 1000),
+      });
+      expect((await accept(event())).status).toBe(429);
+      for (const path of ['/webhook/meta-lead', '/WEBHOOK/META-LEAD/']) {
+        expect((await request(app.getHttpServer()).post(path).set(headers()).send(event())).status).toBe(429);
+      }
+      expect((await request(app.getHttpServer()).get('/leads').set(headers())).status).toBe(200);
+    } finally {
+      await redis.client.del(...keys);
+    }
     expect(
       (
         await request(app.getHttpServer())

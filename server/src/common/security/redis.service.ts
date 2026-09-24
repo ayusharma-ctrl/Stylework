@@ -1,8 +1,8 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
 import Redis from 'ioredis';
 import { config } from '../../config/config';
 @Injectable()
-export class RedisService implements OnModuleInit, OnModuleDestroy {
+export class RedisService implements OnModuleInit, OnApplicationShutdown {
   readonly client = new Redis(config.REDIS_URL, {
     lazyConnect: true,
     maxRetriesPerRequest: 1,
@@ -16,7 +16,7 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     await this.client.connect();
   }
-  async onModuleDestroy() {
+  async onApplicationShutdown() {
     this.client.disconnect();
   }
 }

@@ -15,7 +15,6 @@ import { canonicalJson, hash } from '../../common/crypto';
 import { ApiRequest, Principal } from '../../common/http.types';
 import { AuthService } from '../auth/auth.service';
 import { z } from 'zod';
-import { RateLimiter } from '../../common/security/rate-limiter.service';
 import { WebhooksRepository } from './webhooks.repository';
 import { WebhookDto } from './webhook.dto';
 import { WebhookCredentialsService } from './webhook-credentials.service';
@@ -27,7 +26,6 @@ export class WebhooksService {
   constructor(
     private readonly db: DatabaseService,
     private readonly repository: WebhooksRepository,
-    private readonly limiter: RateLimiter,
     private readonly credentials: WebhookCredentialsService,
     private readonly auth: AuthService,
   ) {}
@@ -38,18 +36,9 @@ export class WebhooksService {
       if (!access?.startsWith('Bearer ') || typeof refresh !== 'string')
         throw new UnauthorizedException('Webhook key or access and refresh tokens are required');
       req.principal = await this.auth.authenticate(access.slice(7), refresh, res);
-      await this.limiter.consume('write-user', req.principal.id, config.WRITE_USER_LIMIT, 60000, res);
       return;
     }
     req.webhookCredentialId = (await this.credentials.verify(req.headers['x-webhook-key'])).id;
-    await this.limiter.consume(
-      'webhook-integration',
-      'meta',
-      config.WEBHOOK_BURST,
-      1000,
-      res,
-      config.WEBHOOK_RATE,
-    );
   }
   private async overloaded() {
     if (Date.now() - this.checked > 1000) {

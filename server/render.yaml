@@ -1,0 +1,38 @@
+services:
+  - type: web
+    name: stylework-api
+    runtime: docker
+    region: singapore
+    plan: free
+    dockerContext: ./server
+    dockerfilePath: ./server/Dockerfile
+    dockerCommand: sh -c 'node dist/database/cli.js migrate && exec node dist/main.js'
+    healthCheckPath: /health/ready
+    autoDeployTrigger: off
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_OPTIONS
+        value: --max-old-space-size=256
+      - key: RUN_WORKER
+        value: "true"
+      - key: DB_POOL_MAX
+        value: "4"
+      - key: WORKER_CONCURRENCY
+        value: "1"
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_DIRECT_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: CLIENT_ORIGINS
+        sync: false
+      - key: TRUST_PROXY
+        sync: false
+      - key: ACCESS_TOKEN_SECRET
+        generateValue: true
+      - key: REFRESH_TOKEN_SECRET
+        generateValue: true
+      - key: METRICS_TOKEN
+        generateValue: true

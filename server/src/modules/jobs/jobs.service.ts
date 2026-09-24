@@ -47,7 +47,7 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
       ),
     );
     await this.queue.waitUntilReady();
-    this.timer = setInterval(() => this.tick(), 100);
+    this.timer = setInterval(() => this.tick(), 1000);
     this.tick();
   }
   private options(id: string) {
@@ -55,8 +55,8 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
       jobId: id,
       attempts: 8,
       backoff: { type: 'exponential', delay: 1000, jitter: 0.25 },
-      removeOnComplete: { age: 3600, count: 10000 },
-      removeOnFail: { age: 604800, count: 10000 },
+      removeOnComplete: { age: 3600, count: 1000 },
+      removeOnFail: { age: 604800, count: 1000 },
     };
   }
   private async enqueue(receiptId: string, recovery = false) {
@@ -74,7 +74,7 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
     if (this.stopping || this.running) return;
     this.running = this.dispatch()
       .then(async () => {
-        if (Date.now() - this.lastRecovery > 5000) {
+        if (Date.now() - this.lastRecovery > 30000) {
           this.lastRecovery = Date.now();
           await this.reconcile();
           await this.observe();
@@ -95,7 +95,7 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
       const rows = await Outbox.findAll({
         where: { publishedAt: null },
         order: [['createdAt', 'ASC']],
-        limit: 100,
+        limit: 25,
         transaction,
         lock: transaction.LOCK.UPDATE,
         skipLocked: true,
@@ -121,7 +121,7 @@ export class JobsService implements OnModuleInit, OnModuleDestroy {
           [Op.or]: [{ lastEnqueuedAt: null }, { lastEnqueuedAt: { [Op.lt]: new Date(Date.now() - 60000) } }],
         },
         order: [['createdAt', 'ASC']],
-        limit: 100,
+        limit: 25,
         transaction,
         lock: transaction.LOCK.UPDATE,
         skipLocked: true,

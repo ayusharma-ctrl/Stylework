@@ -1,8 +1,8 @@
 # Stylework lead management
 
-A single-tenant lead intake application built with React and a modular NestJS monolith. PostgreSQL owns durable intake, business state and audit history; Redis handles shared limits, BullMQ delivery and change notifications. The API and worker run independently from the same server codebase.
+A single-tenant lead intake application built with React and a modular NestJS monolith. PostgreSQL owns durable intake, business state and audit history; Redis handles shared limits, BullMQ delivery and change notifications. By default, API and background processing run in one NestJS process and share a database pool.
 
-**Local app:** http://localhost:8080 · **Local API:** http://localhost:3000
+**Local app:** http://localhost:5173 · **Local API:** http://localhost:3000
 
 **Live deployment:** pending owner publication. No hosted URL is claimed. Deployment configuration for Vercel, Render and Neon is included below.
 
@@ -11,11 +11,11 @@ A single-tenant lead intake application built with React and a modular NestJS mo
 ```mermaid
 flowchart LR
   Caller[Caller with X-Webhook-Key] --> API[NestJS API]
-  UI[React application] -->|REST| API
+  UI[React application :5173] -->|REST| API
   API -->|Receipt + outbox transaction| PG[(PostgreSQL)]
   PG --> Dispatcher[Outbox dispatcher]
   Dispatcher --> Queue[(Redis / BullMQ)]
-  Queue --> Worker[NestJS worker]
+  Queue --> Worker[Background processor inside API]
   Worker -->|Lead + audit + counters + outbox transaction| PG
   Dispatcher -->|Committed notification| PubSub[Redis Pub/Sub]
   PubSub --> API
@@ -47,9 +47,9 @@ docker compose exec api node dist/database/cli.js seed
 docker compose exec api node scripts/smoke.mjs
 ```
 
-Open http://localhost:8080 and enter a demo email. The migration service runs once before API/worker startup. Seeding is explicit and additive: **12 synthetic users, 150 leads, 150 creation audits and 75 additional activities**, spread across the prior 12 months with five reference statuses. `SEED_COUNT` is capped at 200. Repeating the seed does not reset data. Smoke tests add a small number of separate synthetic records. PostgreSQL and Redis use persistent volumes. `docker compose down` stops the stack while preserving them.
+Open http://localhost:5173 and enter a demo email. The migration service runs once before backend startup. Seeding is explicit and additive: **12 synthetic users, 150 leads, 150 creation audits and 75 additional activities**, spread across the prior 12 months with five reference statuses. `SEED_COUNT` is capped at 200. Repeating the seed does not reset data. Smoke tests add a small number of separate synthetic records. PostgreSQL and Redis use persistent volumes. `docker compose down` stops the stack while preserving them.
 
-Local ports: app 8080, API 3000, PostgreSQL 5438, Redis 6388. Database and Redis ports bind only to loopback. Compose uses development credentials and settings; it is a local environment, not an internet deployment template.
+Local ports: app 5173, API 3000, PostgreSQL 5438, Redis 6388. Database and Redis ports bind only to loopback. Compose uses development credentials and settings; it is a local environment, not an internet deployment template.
 
 ### Native development
 
@@ -63,11 +63,11 @@ npm run db:seed
 npm run dev
 ```
 
-In another terminal, run `npm run dev:worker` from `server/`. In `app/`, run `npm ci`, copy `.env.example` to `.env`, then `npm run dev`. On PowerShell, use `Copy-Item .env.example .env` instead of `cp` if preferred. Stop the Compose API before binding the native API to port 3000.
+The backend also starts its background processor; no second server terminal is needed. In `app/`, run `npm ci`, copy `.env.example` to `.env`, then `npm run dev`. On PowerShell, use `Copy-Item .env.example .env` instead of `cp` if preferred. Stop the Compose API before binding the native API to port 3000, and stop the Compose app before running Vite on 5173. Vite uses strictPort so it does not silently move to another port.
 
 ### Adding a lead manually
 
-Use **Add lead** on the leads page. The dialog sends a full snapshot to `POST /webhook/meta-lead` using the current access/refresh headers. It never exposes an integration key. Manual requests receive ordinary mutation quotas, use source `manual` (isolated from `meta`), and capture the signed-in actor in the receipt and audit. They require version 1 and a UUID external lead ID. The UI preserves the submitted event ID/body for retries, polls the durable receipt for up to 30 seconds, then offers an explicit progress check. After processing it opens the lead. Validation failures allow editing; uncertain network failures retry the same submission.
+Use **Add lead** on the leads page. The dialog sends a full snapshot to `POST /webhook/meta-lead` using the current access/refresh headers. It never exposes an integration key. Manual requests receive the webhook IP quota, use source `manual` (isolated from `meta`), and capture the signed-in actor in the receipt and audit. Both manual and keyed submissions share the webhook IP quota. They require version 1 and a UUID external lead ID. The UI preserves the submitted event ID/body for retries, polls the durable receipt for up to 30 seconds, then offers an explicit progress check. After processing it opens the lead. Validation failures allow editing; uncertain network failures retry the same submission.
 
 Receipt lookup accepts `?source=manual` (default `meta`). Replay accepts `EVENT_ID [meta|manual]`. Closing the dialog retains its draft while the leads page remains mounted; a page reload does not retain that draft.
 
@@ -145,17 +145,16 @@ Lead inputs: `first/after` or `last/before`, `search`, `statusIds`, `source`, `c
 
 Access JWTs live 15 minutes, refresh JWTs seven days, with separate secrets/types and issuer/audience checks. Expired access requests lock the session and reuse or mint a single renewed token. Responses expose `X-Access-Token` and `X-Access-Token-Expires-At`. Sign-out revokes the database session. Frontend credentials use sessionStorage; persistent localStorage contains UI preferences only.
 
-| Traffic | Shared defaults |
-|---|---|
-| Sign-in | 5/minute/IP and 5/minute/email |
-| Reads | 300/minute/user; 1,200/minute/IP |
-| Mutations | 60/minute/user; 300/minute/IP |
-| Webhook | 500/second/integration, burst 1,000; 1,000/second/IP |
-| SSE | 3 concurrent streams/user, across API instances |
+| Traffic | IP quota setting | Default |
+|---|---|---|
+| All REST routes, including sign-in, reads, writes and SSE connection requests | API_RATE_LIMIT | 120/minute/IP |
+| Webhook endpoint, with a key or session tokens | WEBHOOK_RATE_LIMIT | 60/minute/IP |
 
-Redis token buckets are atomic, return `429`/`Retry-After`, and fail closed with 503. IP checks precede expensive work; authenticated integration/user checks follow verification. JSON is limited to 64 KiB, metadata to 16 KiB. Supplied origins must exactly match `CLIENT_ORIGINS`; missing Origin is allowed for authenticated CLI callers. Forwarded IPs are trusted only through configured proxy ranges. REST rejects unknown filters, unsupported sorts and pages above 100. SQL values are parameterized and sort columns allowlisted.
+These are shared token buckets, not separate quotas per route/user. Each bucket can initially admit its configured capacity and refills continuously over one minute. Health probes and CORS preflight are exempt. The separate fixed cap of three active SSE connections per user prevents long-lived resource accumulation; it is not another request-rate setting.
 
-Database pools, queue concurrency, admission backlog and request duration are bounded. Each API instance admits at most `MAX_INFLIGHT_REQUESTS` (default 32) ordinary requests at once and returns retryable 503 rather than building an unbounded database wait queue. New intake also returns 503 when the observed pending backlog reaches `MAX_PENDING_EVENTS` (default 100,000); the cached check is an overload signal, not an exact hard quota. Hosting-edge limits/WAF are still needed for volumetric attacks. SSE has separate admission, heartbeats, session checks, five-minute reconnects and slow-consumer closure; revocation can take up to the 15-second heartbeat interval.
+Redis token buckets are atomic, return `429`/`Retry-After`, and fail closed with 503. IP checks precede authentication and expensive work. JSON is limited to 64 KiB, metadata to 16 KiB. Supplied origins must exactly match `CLIENT_ORIGINS`; missing Origin is allowed for authenticated CLI callers. Forwarded IPs are trusted only through configured proxy ranges. REST rejects unknown filters, unsupported sorts and pages above 100. SQL values are parameterized and sort columns allowlisted.
+
+Database pools, queue concurrency, admission backlog and request duration are bounded. Each API instance admits at most `MAX_INFLIGHT_REQUESTS` (default 16) ordinary requests at once and returns retryable 503 rather than building an unbounded database wait queue. New intake also returns 503 when the observed pending backlog reaches `MAX_PENDING_EVENTS` (default 5,000); the cached check is an overload signal, not an exact hard quota. Hosting-edge limits/WAF are still needed for volumetric attacks. SSE has separate admission, heartbeats, session checks, five-minute reconnects and slow-consumer closure; revocation can take up to the 15-second heartbeat interval.
 
 ## Response compression
 
@@ -164,6 +163,8 @@ The API uses [Express compression](https://expressjs.com/en/resources/middleware
 The Docker frontend uses [Nginx gzip](https://nginx.org/en/docs/http/ngx_http_gzip_module.html) for HTML, JavaScript, CSS, JSON and SVG, with `Vary: Accept-Encoding`. Vercel handles compression at its hosting edge. Static assets keep immutable caching.
 
 ## Testing and capacity scope
+
+September 25 deployment revision: backend build, 25 unit tests, 25 PostgreSQL/Redis integration scenarios, both Docker builds, two Chromium journeys at port 5173 and the combined-process webhook-to-dashboard smoke passed. Runtime checks confirmed no standalone worker container, a shared pool of four and concurrency one. Hosted Render deployment remains unverified.
 
 ```sh
 # server/
@@ -178,7 +179,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-Integration creates a unique disposable `stylework_test_*` database and reserves Redis DB 15. Defaults use local Compose dependencies; override `TEST_DATABASE_URL` (a PostgreSQL admin connection) and `TEST_REDIS_URL` as needed. Never point these tests at customer infrastructure. The full smoke requires API and worker; it creates and revokes a temporary database webhook key unless `WEBHOOK_KEY` is provided. It adds a synthetic lead and retains its audit trail.
+Integration creates a unique disposable `stylework_test_*` database and reserves Redis DB 15. Defaults use local Compose dependencies; override `TEST_DATABASE_URL` (a PostgreSQL admin connection) and `TEST_REDIS_URL` as needed. Never point these tests at customer infrastructure. The full smoke requires the backend with RUN_WORKER=true; it creates and revokes a temporary database webhook key unless `WEBHOOK_KEY` is provided. It adds a synthetic lead and retains its audit trail.
 
 Local verification on 24 September 2026 passed: **22 backend unit tests, 25 real PostgreSQL/Redis integration scenarios, 7 frontend tests and 2 Playwright journeys**, plus independent production builds, complete Compose startup and the REST webhook-to-dashboard smoke journey. Superseded GraphQL tests were replaced by REST coverage. New regressions verify date boundaries, manual intake/authentication/quotas/audit, source isolation and compression negotiation. Chromium verifies manual creation and both same-day date filters with no GraphQL traffic. Frontend gzip responses decompress to the original asset. Desktop light/dark and mobile screenshots were inspected. Integration also verifies injected database rollback, duplicate acceptance/redelivery, ordering, session races, query limits, audit immutability, SSE revocation and recovery after Redis data loss. Crash boundaries are exercised through transaction fault injection and committed-job redelivery; exhaustive process-kill timing and multi-region chaos are future work. Hosted deployment and remote GitHub Actions execution have not been verified.
 
@@ -187,20 +188,27 @@ The architecture aims to support millions of requests through bounded admission,
 ## Deployment steps
 
 1. Push this repository to your Git host. Provision Neon PostgreSQL in the same region as the services. Set the pooled connection as `DATABASE_URL` and the direct connection as `DATABASE_DIRECT_URL`, with TLS enabled. Migrations use the direct connection because their advisory lock is session-scoped. See [Neon pooling](https://neon.com/docs/connect/connection-pooling).
-2. Import [render.yaml](render.yaml). It defines a paid persistent Key Value instance using `noeviction`, an API and a worker. Supply database URLs, exact frontend origin and deployment-specific trusted proxy ranges. Shared JWT/metrics secrets are generated in an environment group. Review current plans/costs before creation. The API pre-deploy command runs migrations; release API before worker on first deployment and after schema changes. Auto-deploy is disabled to keep release ordering explicit. See [Render Blueprint fields](https://render.com/docs/blueprint-spec).
+2. Create a Render Blueprint using **Blueprint Path `server/render.yaml`**. It defines only one **free web service**. Supply external PostgreSQL/Redis URLs, the exact frontend origin and deployment-specific trusted proxy ranges. The database/Redis are not created by this Blueprint; Redis must support BullMQ connections/Lua and use noeviction. JWT/metrics secrets are generated on the service. API and processor run together with pool 4, concurrency 1 and a 256 MiB V8 heap cap (not a cap on total RSS). Migrations run before startup under the existing advisory lock because free web services have no paid pre-deploy hook. A failed migration prevents startup. Docker paths remain relative to the repository root even though the YAML moved. See [Blueprint fields](https://render.com/docs/blueprint-spec) and [deployment commands](https://render.com/docs/deploys).
+
 3. Import the repo into Vercel with **Root Directory `app`**, Node 24 and `VITE_API_URL=https://YOUR-API.onrender.com`. [app/vercel.json](app/vercel.json) supplies SPA rewrites and response headers. Set the resulting exact Vercel/custom origin in the API and redeploy. Avoid wildcard preview origins for a shared database. See [Vercel configuration](https://vercel.com/docs/project-configuration).
-4. Run the credential creation CLI in the API service shell. Supply the resulting key only to the sender. Do not seed demo leads automatically in production. Explicit demonstration seeding requires `ALLOW_DEMO_SEED=true`.
-5. Verify readiness, run a signed-in browser journey and send one keyed webhook through the deployed worker. Record the public app/API URLs here after owner publication.
+4. Run the credential creation CLI locally with the production database connection; Render Free does not provide a service shell. Supply the resulting key only to the sender. Do not seed demo leads automatically in production. Explicit demonstration seeding requires `ALLOW_DEMO_SEED=true`.
+5. Verify readiness, run a signed-in browser journey and send one keyed webhook through the backend processor. Record the public app/API URLs here after owner publication.
 
 **Upgrade note:** migration 003 renames the configuration table. Stop the old API/worker, migrate once, then start both with the new image. Do not run old and new versions together during this rename. Fresh Compose startup handles migrations automatically.
 
-Start with API pool 10 + worker pool 10 + migration pool 10 = **30 potential PostgreSQL connections**, plus administrative headroom. Scale this budget with every replica and align it with the database tier; more application workers do not create database capacity. Redis also needs headroom for queue connections, rate keys and retained jobs. Use TLS, restricted network access, backups and a runtime DB role with only required DML privileges; audit mutation is blocked even if a writer accidentally issues it.
+The default runtime has one shared pool of **4 PostgreSQL connections** for API and jobs. Startup migrations use a separate pool of at most 4, closed before the API starts. Keep administrative headroom and budget for temporary old/new service overlap during deploys. Job concurrency is 1, outbox batches are 25, dispatch checks occur once/second and receipt reconciliation every 30 seconds. These small defaults reduce contention and idle polling on limited resources. Redis still needs several queue/PubSub connections, TLS, noeviction and provider-compatible connection quotas.
+
+### Why keep background processing?
+
+The webhook transaction saves a durable receipt quickly. The processor then creates/updates the lead and commits audit/counters together, retries failures and recovers unfinished receipts after restarts. It is asynchronous work, not a mandatory separate deployment. RUN_WORKER=true (default) loads it into the API with the same database pool. The standalone worker entrypoint remains optional for a future paid deployment: set RUN_WORKER=false on the API and run npm run start:worker separately. Separate processes trade extra memory/cost for failure isolation and independent scaling.
+
+On [Render Free](https://render.com/docs/free), a web service can sleep after 15 idle minutes and restart at any time; background jobs pause while it sleeps. The next incoming request wakes it, after which PostgreSQL receipts are reconciled. Expect cold starts and delayed processing, not always-on production guarantees. The free tier also has bandwidth/hour limits; external database/Redis providers have their own limits. No artificial keep-alive traffic is configured.
 
 ## Operations and recovery
 
 - **Pending backlog:** inspect `/metrics`, oldest receipt age and worker health. Restore database/Redis connectivity, then allow reconciliation to republish pending receipts. Never delete pending PostgreSQL receipts to clear a queue.
 - **Failed events:** inspect `/webhook-events/:eventId`, fix the cause, then run `node dist/scripts/replay.js EVENT_ID`. Replaying a source-version conflict will still fail until a new correctly versioned event arrives. Replays preserve the original payload and request trace.
-- **Redis loss:** restart Redis and workers. Durable pending receipts older than the enqueue grace period are reconciled every five seconds in batches. Rate limits start with fresh buckets; edge controls remain important during recovery.
+- **Redis loss:** restart Redis and workers. Durable pending receipts older than the enqueue grace period are reconciled every 30 seconds in batches of 25. Rate limits start with fresh buckets; edge controls remain important during recovery.
 - **Counters:** during maintenance, run `node dist/database/cli.js rebuild-counters`. It blocks lead/activity writes while rebuilding an exact snapshot. Reconnection/periodic SSE snapshots recover missed notifications and calendar rollover.
 - **Shutdown:** stop admission, close SSE subscribers, drain worker jobs within the shutdown deadline, then close Redis/PostgreSQL connections. Unacknowledged jobs are safe to redeliver. Give containers at least 35 seconds.
 - **Monitoring:** protected Prometheus output includes HTTP latency/status, durable receipt outcomes/retries, oldest pending age, local pool usage/waiters, process metrics and SSE connections. Operational logs contain trace IDs, route/status/duration and safe error categories, without payloads or credentials. Audit contains business data and needs stricter access/retention controls than logs.
@@ -208,13 +216,13 @@ Start with API pool 10 + worker pool 10 + migration pool 10 = **30 potential Pos
 
 ## Trade-offs
 
-The modular monolith keeps transactions and deployment understandable; separate API/worker processes isolate admission from processing. PostgreSQL row/advisory locks and constraints establish correctness; Redis leases only coordinate stream admission. Database-first intake adds a write before acknowledgement but provides a durable acceptance boundary. Sharded counters avoid a singleton hot row at the cost of reconciliation tooling. Configurable statuses are data rather than enums, so renames and archival need no lead backfill.
+The modular monolith keeps transactions and deployment understandable. Running API and jobs together minimizes deployment cost but shares CPU, memory and failure lifetime. PostgreSQL row/advisory locks and constraints establish correctness; Redis leases only coordinate stream admission. Database-first intake adds a write before acknowledgement but provides a durable acceptance boundary. Sharded counters avoid a singleton hot row at the cost of reconciliation tooling. Configurable statuses are data rather than enums, so renames and archival need no lead backfill.
 
 This is a single-tenant application with broad signed-in permissions and an explicitly weak identity flow. There is no tenant isolation/RBAC, external Meta handshake, contact editing UI or hard deletion. Lists retain at most 20 pages and use virtualization; old pages can be fetched backward. SSE carries complete snapshots and uses fetch for both token headers. The UI shows a refresh notice instead of silently reordering lists on incoming changes.
 
 ## Scaling considerations
 
-Scale API and worker replicas independently using measured latency, pool wait and backlog age. Keep the same JWT secrets, PostgreSQL and Redis across replicas. Cap total connections, load-test indexes with realistic selectivity, and watch hot statuses. Apply CDN/edge filtering before the API. Separate BullMQ Redis from ephemeral limiter/cache traffic when contention or memory pressure justifies it. Add table partitioning, receipt/outbox retention, targeted read replicas and database capacity before assuming horizontal application scaling is sufficient. Distributed locking alone cannot make an unbounded workload safe.
+For a future paid deployment, separate and scale API/worker replicas using measured latency, pool wait and backlog age. Keep the same JWT secrets, PostgreSQL and Redis across replicas. Cap total connections, load-test indexes with realistic selectivity, and watch hot statuses. Apply CDN/edge filtering before the API. Separate BullMQ Redis from ephemeral limiter/cache traffic when contention or memory pressure justifies it. Add table partitioning, receipt/outbox retention, targeted read replicas and database capacity before assuming horizontal application scaling is sufficient. Distributed locking alone cannot make an unbounded workload safe.
 
 ## Future improvements
 

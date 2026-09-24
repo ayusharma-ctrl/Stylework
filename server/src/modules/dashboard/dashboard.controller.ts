@@ -1,7 +1,6 @@
 import { Controller, Get, HttpException, Req, Res, ServiceUnavailableException } from '@nestjs/common';
 import { randomUUID } from 'node:crypto';
 import { Response } from 'express';
-import { config } from '../../config/config';
 import { ApiRequest } from '../../common/http.types';
 import { RedisService } from '../../common/security/redis.service';
 import { Telemetry } from '../../common/security/telemetry.service';
@@ -32,7 +31,7 @@ export class DashboardController {
       token = randomUUID();
     let granted: unknown;
     try {
-      granted = await this.redis.client.eval(acquire, 1, key, token, config.SSE_USER_LIMIT);
+      granted = await this.redis.client.eval(acquire, 1, key, token, 3);
     } catch {
       throw new ServiceUnavailableException('Stream coordination unavailable');
     }

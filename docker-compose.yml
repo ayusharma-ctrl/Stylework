@@ -11,7 +11,10 @@ x-server: &server
     DATABASE_URL: postgres://stylework:stylework@postgres:5432/stylework
     DATABASE_DIRECT_URL: postgres://stylework:stylework@postgres:5432/stylework
     REDIS_URL: redis://redis:6379
-    CLIENT_ORIGINS: http://localhost:8080,http://localhost:5173
+    CLIENT_ORIGINS: http://localhost:5173
+    RUN_WORKER: "true"
+    DB_POOL_MAX: "4"
+    WORKER_CONCURRENCY: "1"
   stop_grace_period: 35s
 
 services:
@@ -55,24 +58,12 @@ services:
       interval: 10s
       timeout: 5s
       retries: 10
-  worker:
-    <<: *server
-    command: ["node", "dist/worker.js"]
-    restart: unless-stopped
-    depends_on:
-      migrate: { condition: service_completed_successfully }
-      redis: { condition: service_healthy }
-    healthcheck:
-      test: ["CMD", "node", "-e", "const f=require('fs');process.exit(Date.now()-f.statSync('/tmp/stylework-worker').mtimeMs<30000?0:1)"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
   app:
     build:
       context: ./app
       args:
         VITE_API_URL: http://localhost:3000
-    ports: ["8080:8080"]
+    ports: ["5173:8080"]
     depends_on:
       api: { condition: service_healthy }
     healthcheck:

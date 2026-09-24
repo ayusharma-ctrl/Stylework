@@ -13,7 +13,9 @@ Read [progress](references/progress.md) to resume work and [architecture](../../
 - Statuses are stable IDs and archived, never destructively removed.
 - Email-only sign-in and readable session tokens are explicit user requirements; document these limitations accurately.
 - Keep raw tokens and PII out of operational logs.
-- External webhook authentication uses X-Webhook-Key, verified against a PostgreSQL key hash. Manual lead creation uses the same route with access/refresh tokens and normal mutation quotas; no integration key reaches the browser. Persist the trusted actor and isolate manual/meta source IDs.
+- External webhook authentication uses X-Webhook-Key, verified against a PostgreSQL key hash. Manual lead creation uses the same route with access/refresh tokens; both use the webhook IP quota. No integration key reaches the browser. Persist the trusted actor and isolate manual/meta source IDs.
+- September 25 deployment scope: frontend on localhost:5173; one free Render backend defined in server/render.yaml. API embeds jobs by default (RUN_WORKER=true) with a shared pool of 4 and concurrency 1. Standalone worker is optional for future scaling, never required by the default Compose/Render setup. PostgreSQL and Redis remain external dependencies on Render.
+- Only two configurable request quotas: API_RATE_LIMIT=120/minute/IP across REST and WEBHOOK_RATE_LIMIT=60/minute/IP on the webhook endpoint. Health/preflight are exempt; the fixed SSE connection cap and resource bounds are not route rate limits. Free-tier sleep pauses work until wake/reconciliation.
 - REST only: leads, lead detail and activities. GraphQL/Apollo were removed at the user's request on September 24. Keep cursor pagination, strict schemas and query bounds.
 - Single tenant: app_settings is a singleton for default status, timezone and catalog revision, not a workspace/tenant table. Migration 003 preserves the previous configuration. Models have separate files under server/src/database/models.
 - API response compression negotiates gzip/Brotli; frontend Nginx compresses static responses. SSE and sign-in responses are excluded. Request JSON stays bounded and uncompressed.

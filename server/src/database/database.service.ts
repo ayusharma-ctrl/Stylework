@@ -1,4 +1,4 @@
-import { Injectable, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import { Injectable, OnApplicationShutdown, OnModuleInit } from '@nestjs/common';
 import { Sequelize } from 'sequelize';
 import { config } from '../config/config';
 import { registerModels } from './models';
@@ -13,7 +13,7 @@ export function createDatabase(url = config.DATABASE_URL, poolMax = config.DB_PO
   });
 }
 @Injectable()
-export class DatabaseService implements OnModuleInit, OnModuleDestroy {
+export class DatabaseService implements OnModuleInit, OnApplicationShutdown {
   readonly sequelize = createDatabase();
   constructor() {
     registerModels(this.sequelize);
@@ -21,7 +21,7 @@ export class DatabaseService implements OnModuleInit, OnModuleDestroy {
   async onModuleInit() {
     await this.sequelize.authenticate();
   }
-  async onModuleDestroy() {
+  async onApplicationShutdown() {
     await this.sequelize.close();
   }
 }

@@ -52,7 +52,7 @@ jobs:
       - run: npm run test:e2e
         working-directory: app
         env:
-          APP_URL: http://localhost:8080
+          APP_URL: http://localhost:5173
       - uses: actions/upload-artifact@v4
         if: always()
         with:

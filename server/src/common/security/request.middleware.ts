@@ -68,20 +68,15 @@ export class RequestMiddleware {
       if (['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method) && !req.is('application/json'))
         throw new UnsupportedMediaTypeException('Content-Type must be application/json');
       const ip = req.ip || req.socket.remoteAddress || 'unknown';
-      if (req.path === '/signin')
-        await this.limiter.consume('signin-ip', ip, config.SIGNIN_IP_LIMIT, 60000, res);
-      else if (req.path === '/webhook/meta-lead' && req.headers['x-webhook-key'] !== undefined)
-        await this.limiter.consume('webhook-ip', ip, config.WEBHOOK_IP_RATE, 1000, res);
-      else if (req.path != '/metrics') {
-        const read = req.method === 'GET';
-        await this.limiter.consume(
-          read ? 'read-ip' : 'write-ip',
-          ip,
-          read ? config.READ_IP_LIMIT : config.WRITE_IP_LIMIT,
-          60000,
-          res,
-        );
-      }
+      // Only this exact endpoint gets the webhook policy; headers cannot select a larger quota.
+      const webhook = req.path.toLowerCase().replace(/\/+$/, '') === '/webhook/meta-lead';
+      await this.limiter.consume(
+        webhook ? 'webhook-ip' : 'api-ip',
+        ip,
+        webhook ? config.WEBHOOK_RATE_LIMIT : config.API_RATE_LIMIT,
+        60000,
+        res,
+      );
       next();
     } catch (error) {
       const status = error instanceof HttpException ? error.getStatus() : 503;
