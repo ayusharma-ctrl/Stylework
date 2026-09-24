@@ -6,7 +6,7 @@ services:
     plan: free
     dockerContext: ./server
     dockerfilePath: ./server/Dockerfile
-    dockerCommand: ./scripts/start.sh
+    dockerCommand: ./src/scripts/start.sh
     healthCheckPath: /health/ready
     autoDeployTrigger: off
     envVars:
