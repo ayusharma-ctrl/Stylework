@@ -74,7 +74,7 @@ export default function Signin() {
           <h2 className="text-3xl font-semibold tracking-tight">Welcome to Stylework</h2>
           <p className="mt-3 mb-8 text-muted-foreground">Enter your email to get started.</p>
           <form onSubmit={submit} className="space-y-5">
-            <label className="block text-sm font-medium">
+            <label className="block text-sm font-medium my-8">
               Email address
               <Input
                 autoComplete="email"
