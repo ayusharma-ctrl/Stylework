@@ -6,7 +6,11 @@ services:
     plan: free
     dockerContext: ./server
     dockerfilePath: ./server/Dockerfile
-    dockerCommand: node dist/database/cli.js migrate && exec node dist/main.js
+    dockerCommand: >
+      echo "Starting migrations..." &&
+      node dist/database/cli.js migrate &&
+      echo "Migrations completed. Starting server..." &&
+      exec node dist/main.js
     healthCheckPath: /health/ready
     autoDeployTrigger: off
     envVars:
