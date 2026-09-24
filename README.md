@@ -33,37 +33,86 @@ flowchart LR
 - Status changes use `expectedVersion`; a concurrent stale edit gets 409. Status IDs remain stable, with soft archival and atomic default replacement. Existing leads, counts, filters and history remain intact.
 - Counters spread across 64 lead-ID shards. SSE computes consistent snapshots, sends dynamic cards/statuses, coalesces updates to once/second, and reconciles every 30 seconds. Reporting uses `Asia/Kolkata`; stored timestamps are UTC. A zero yesterday denominator produces `null`.
 
-The singleton `app_settings` row stores the default status, timezone and catalog revision. It has a database `CHECK(id=1)` and no tenant ownership or workspace relationships. Migration 003 renames the earlier settings table without losing configuration.
+The singleton `app_settings` row stores the default status, timezone and catalog revision. It has a database `CHECK(id=1)` and no tenant ownership or workspace relationships. Migration 20260924000000-single-tenant-intake (formerly 003) renames the earlier settings table without losing configuration.
 
 See [architecture decisions](docs/architecture.md). Local AI guidance and progress files are intentionally excluded from Git.
 
 ## Setup instructions
 
-Requires Docker with Compose v2.24+; native development also needs Node 24 and npm. Run from the repository root:
+The frontend runs at **http://localhost:5173** and the backend at **http://localhost:3000**. Vite development and preview both use strict port 5173; the frontend Docker image also listens on 5173. The backend defaults to 3000, and Compose/Render explicitly set PORT=3000.
+
+### Configure your hosted databases
+
+Copy `server/.env.example` to `server/.env`, then replace the placeholders with your own connection strings:
+
+| Setting | Value to supply |
+|---|---|
+| `DATABASE_URL` | Your Neon pooled PostgreSQL URL for API/background processing. |
+| `DATABASE_DIRECT_URL` | Your Neon direct URL for the **same database and branch**, used for migrations and maintenance. |
+| `REDIS_URL` | Your Redis provider's TCP URL: `rediss://user:password@host:port` for TLS, or `redis://...` where TLS is not used. An HTTPS REST URL will not work with BullMQ/ioredis. |
+| `PORT` | `3000` |
+| `CLIENT_ORIGINS` | `http://localhost:5173` for local development. |
+
+Copy `app/.env.example` to `app/.env`; keep `VITE_API_URL=http://localhost:3000`. Database credentials belong only in the server environment, never in Vite variables.
+
+Neon's pooled hostname contains `-pooler`; copy its direct connection separately from the Neon console. The migration runner holds a session-level advisory lock and therefore uses the direct URL. Keep TLS enabled; the example uses `sslmode=verify-full` for certificate and hostname verification. Redis must support regular TCP connections, Lua, BullMQ and the noeviction policy. See [Neon connection pooling](https://neon.com/docs/connect/connection-pooling).
+
+### Run with Node
+
+Requires Node 24 and npm. In the first terminal:
 
 ```sh
-docker compose up --build --wait
-docker compose exec api node dist/database/cli.js seed
-docker compose exec api node scripts/smoke.mjs
-```
-
-Open http://localhost:5173 and enter a demo email. The migration service runs once before backend startup. Seeding is explicit and additive: **12 synthetic users, 150 leads, 150 creation audits and 75 additional activities**, spread across the prior 12 months with five reference statuses. `SEED_COUNT` is capped at 200. Repeating the seed does not reset data. Smoke tests add a small number of separate synthetic records. PostgreSQL and Redis use persistent volumes. `docker compose down` stops the stack while preserving them.
-
-Local ports: app 5173, API 3000, PostgreSQL 5438, Redis 6388. Database and Redis ports bind only to loopback. Compose uses development credentials and settings; it is a local environment, not an internet deployment template.
-
-### Native development
-
-```sh
-docker compose up -d postgres redis
 cd server
 npm ci
-cp .env.example .env
+# Copy .env.example to .env and fill in the hosted URLs before continuing.
 npm run db:migrate
-npm run db:seed
 npm run dev
 ```
 
-The backend also starts its background processor; no second server terminal is needed. In `app/`, run `npm ci`, copy `.env.example` to `.env`, then `npm run dev`. On PowerShell, use `Copy-Item .env.example .env` instead of `cp` if preferred. Stop the Compose API before binding the native API to port 3000, and stop the Compose app before running Vite on 5173. Vite uses strictPort so it does not silently move to another port.
+In another terminal:
+
+```sh
+cd app
+npm ci
+# Copy .env.example to .env if you have not already done so.
+npm run dev
+```
+
+The backend starts its background processor in the same process. No local PostgreSQL/Redis containers or separate worker terminal are needed with hosted URLs. On PowerShell use `Copy-Item .env.example .env`; on other shells use `cp .env.example .env`. Do not overwrite an existing configured .env file. Stop any other API/app process already occupying ports 3000/5173; Vite will fail instead of silently changing ports.
+
+### Run with Docker and hosted URLs
+
+Requires Docker with Compose v2.24+. After configuring `server/.env`, run from the repository root:
+
+```sh
+docker compose up --build --wait
+```
+
+Default Compose starts only the app, API and one-shot migration service. It reads the hosted connection strings directly from `server/.env`; there are no local-database URL overrides. The API starts after migrations succeed. Both URLs remain http://localhost:5173 and http://localhost:3000. This Compose file is for local application hosting; use the deployment steps below for public hosting.
+
+### Optional local databases and tests
+
+For offline/local development instead of hosted services, use the explicit override:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.local.yml up --build --wait
+```
+
+This starts PostgreSQL on loopback port 5438 and Redis on loopback port 6388, with persistent volumes. It deliberately ignores `server/.env` for containers and supplies local URLs/development settings, so it cannot accidentally run its migration service against Neon. The app/API still use 5173/3000. Existing local volumes remain intact; `down` without `-v` preserves them.
+
+To run only the test dependencies:
+
+```sh
+docker compose -f docker-compose.yml -f docker-compose.local.yml up -d postgres redis
+```
+
+Native development with these local databases uses DATABASE_URL and DATABASE_DIRECT_URL set to `postgres://stylework:stylework@localhost:5438/stylework`, and REDIS_URL set to `redis://localhost:6388`. These are also the native development fallback URLs when no environment is supplied. Integration tests create their own isolated database and use Redis DB 15; they do not use your hosted runtime URLs by default.
+
+### Optional sample data and smoke check
+
+After startup, from `server/` run `npm run db:seed` to add sample data to the database configured there. For Docker, use `docker compose exec api node dist/database/cli.js seed`; include both -f files when using the local override.
+
+Seeding is explicit and additive: **12 synthetic users, 150 leads, 150 creation audits and 75 additional activities**, across the prior 12 months. SEED_COUNT is capped at 200. Repeating the seed does not reset data. The smoke journey is `npm run smoke` after `npm run build`, or `docker compose exec api node scripts/smoke.mjs`. It adds a small number of synthetic records to the configured database; run it only where you intend to create those records.
 
 ### Adding a lead manually
 
@@ -164,6 +213,8 @@ The Docker frontend uses [Nginx gzip](https://nginx.org/en/docs/http/ngx_http_gz
 
 ## Testing and capacity scope
 
+Hosted-URL/port configuration verification: both Compose variants validated; backend 25 unit tests and both Docker production builds passed. The optional local stack became healthy, served the app on 5173 and API on 3000, and passed the full webhook-to-dashboard smoke. Hosted Neon/Redis connectivity remains unverified until your actual URLs are configured.
+
 September 25 deployment revision: backend build, 25 unit tests, 25 PostgreSQL/Redis integration scenarios, both Docker builds, two Chromium journeys at port 5173 and the combined-process webhook-to-dashboard smoke passed. Runtime checks confirmed no standalone worker container, a shared pool of four and concurrency one. Hosted Render deployment remains unverified.
 
 ```sh
@@ -179,7 +230,7 @@ npx playwright install chromium
 npm run test:e2e
 ```
 
-Integration creates a unique disposable `stylework_test_*` database and reserves Redis DB 15. Defaults use local Compose dependencies; override `TEST_DATABASE_URL` (a PostgreSQL admin connection) and `TEST_REDIS_URL` as needed. Never point these tests at customer infrastructure. The full smoke requires the backend with RUN_WORKER=true; it creates and revokes a temporary database webhook key unless `WEBHOOK_KEY` is provided. It adds a synthetic lead and retains its audit trail.
+Integration creates a unique disposable `stylework_test_*` database and reserves Redis DB 15. Defaults use the optional local Compose dependencies described above; override `TEST_DATABASE_URL` (a PostgreSQL admin connection) and `TEST_REDIS_URL` as needed. Never point these tests at customer infrastructure. The full smoke requires the backend with RUN_WORKER=true; it creates and revokes a temporary database webhook key unless `WEBHOOK_KEY` is provided. It adds a synthetic lead and retains its audit trail.
 
 Local verification on 24 September 2026 passed: **22 backend unit tests, 25 real PostgreSQL/Redis integration scenarios, 7 frontend tests and 2 Playwright journeys**, plus independent production builds, complete Compose startup and the REST webhook-to-dashboard smoke journey. Superseded GraphQL tests were replaced by REST coverage. New regressions verify date boundaries, manual intake/authentication/quotas/audit, source isolation and compression negotiation. Chromium verifies manual creation and both same-day date filters with no GraphQL traffic. Frontend gzip responses decompress to the original asset. Desktop light/dark and mobile screenshots were inspected. Integration also verifies injected database rollback, duplicate acceptance/redelivery, ordering, session races, query limits, audit immutability, SSE revocation and recovery after Redis data loss. Crash boundaries are exercised through transaction fault injection and committed-job redelivery; exhaustive process-kill timing and multi-region chaos are future work. Hosted deployment has not been verified. Automated GitHub Actions configuration was removed at the owner's request; run the commands above locally.
 
@@ -188,7 +239,7 @@ The architecture aims to support millions of requests through bounded admission,
 ## Deployment steps
 
 1. Push this repository to your Git host. Provision Neon PostgreSQL in the same region as the services. Set the pooled connection as `DATABASE_URL` and the direct connection as `DATABASE_DIRECT_URL`, with TLS enabled. Migrations use the direct connection because their advisory lock is session-scoped. See [Neon pooling](https://neon.com/docs/connect/connection-pooling).
-2. Create a Render Blueprint using **Blueprint Path `server/render.yaml`**. It defines only one **free web service**. Supply external PostgreSQL/Redis URLs, the exact frontend origin and deployment-specific trusted proxy ranges. The database/Redis are not created by this Blueprint; Redis must support BullMQ connections/Lua and use noeviction. JWT/metrics secrets are generated on the service. API and processor run together with pool 4, concurrency 1 and a 256 MiB V8 heap cap (not a cap on total RSS). Migrations run before startup under the existing advisory lock because free web services have no paid pre-deploy hook. A failed migration prevents startup. Docker paths remain relative to the repository root even though the YAML moved. See [Blueprint fields](https://render.com/docs/blueprint-spec) and [deployment commands](https://render.com/docs/deploys).
+2. Create a Render Blueprint using **Blueprint Path `server/render.yaml`**. It defines only one **free web service**. Supply your Neon pooled/direct URLs and Redis TCP/TLS URL, the exact frontend origin and deployment-specific trusted proxy ranges. The Blueprint sets PORT=3000; Render exposes the service through its normal public HTTPS URL. The database/Redis are not created by this Blueprint; Redis must support BullMQ connections/Lua and use noeviction. JWT/metrics secrets are generated on the service. API and processor run together with pool 4, concurrency 1 and a 256 MiB V8 heap cap (not a cap on total RSS). Migrations run before startup under the existing advisory lock because free web services have no paid pre-deploy hook. A failed migration prevents startup. Docker paths remain relative to the repository root even though the YAML moved. See [Blueprint fields](https://render.com/docs/blueprint-spec) and [deployment commands](https://render.com/docs/deploys).
 
 3. Import the repo into Vercel with **Root Directory `app`**, Node 24 and `VITE_API_URL=https://YOUR-API.onrender.com`. [app/vercel.json](app/vercel.json) supplies SPA rewrites and response headers. Set the resulting exact Vercel/custom origin in the API and redeploy. Avoid wildcard preview origins for a shared database. See [Vercel configuration](https://vercel.com/docs/project-configuration).
 4. Run the credential creation CLI locally with the production database connection; Render Free does not provide a service shell. Supply the resulting key only to the sender. Do not seed demo leads automatically in production. Explicit demonstration seeding requires `ALLOW_DEMO_SEED=true`.

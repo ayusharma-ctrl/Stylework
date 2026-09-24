@@ -33,3 +33,6 @@ Frontend uses port 5173 in Vite and Docker host mappings. Two Redis-backed IP to
 
 ## ORM and repository cleanup
 Standard timestamped up/down migrations use QueryInterface, with existing history names translated under a session lock before discovery. Normal lead/activity reads use models and a lead-status association; counter aggregates/increments use a dedicated DashboardCounter model. Retain narrowly scoped PostgreSQL expressions for indexed tuple seeks, locks, atomic additive upserts, bounded backlog scans and bulk seed/rebuild operations. Keep managed Sequelize transactions. The README lists each raw-SQL exception. GitHub Actions and tracked local AI guidance are removed at the owner's request; verification remains runnable locally.
+
+## Hosted database configuration
+Default Compose runs only app, API and migrations, reading server/.env for Neon pooled DATABASE_URL, direct DATABASE_DIRECT_URL and hosted REDIS_URL. It does not override those URLs or start local datastores. Optional docker-compose.local.yml supplies isolated local development datastores/settings and preserves existing named volumes. Vite dev/preview and the frontend container listen on 5173; the API listens on 3000 in Compose and Render. Credentials stay server-side. Migration/maintenance connections must use the same Neon database/branch through its direct endpoint.

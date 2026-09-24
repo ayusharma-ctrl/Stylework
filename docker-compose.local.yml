@@ -1,0 +1,47 @@
+# Optional override for local development/tests; default Compose uses hosted URLs.
+x-local-server: &local-server
+  env_file: !reset []
+  environment:
+    NODE_ENV: development
+    DATABASE_URL: postgres://stylework:stylework@postgres:5432/stylework
+    DATABASE_DIRECT_URL: postgres://stylework:stylework@postgres:5432/stylework
+    REDIS_URL: redis://redis:6379
+    CLIENT_ORIGINS: http://localhost:5173
+    RUN_WORKER: "true"
+
+services:
+  postgres:
+    image: postgres:17-bookworm
+    environment:
+      POSTGRES_USER: stylework
+      POSTGRES_PASSWORD: stylework
+      POSTGRES_DB: stylework
+    ports: ["127.0.0.1:5438:5432"]
+    volumes: [postgres-data:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U stylework -d stylework"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes", "--maxmemory", "256mb", "--maxmemory-policy", "noeviction"]
+    ports: ["127.0.0.1:6388:6379"]
+    volumes: [redis-data:/data]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+  migrate:
+    <<: *local-server
+    depends_on:
+      postgres: { condition: service_healthy }
+  api:
+    <<: *local-server
+    depends_on:
+      redis: { condition: service_healthy }
+
+volumes:
+  postgres-data:
+  redis-data:
