@@ -14,6 +14,7 @@ COPY package*.json ./
 RUN npm ci --omit=dev --no-audit --no-fund && npm cache clean --force
 COPY --from=build /app/dist ./dist
 COPY scripts ./scripts
+RUN chmod +x ./scripts/start.sh
 USER node
 EXPOSE 3000
 CMD ["node", "dist/main.js"]
