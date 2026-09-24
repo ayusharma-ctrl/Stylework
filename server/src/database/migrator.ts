@@ -1,14 +1,10 @@
-import { Sequelize } from 'sequelize';
+import { Op, Sequelize } from 'sequelize';
 import { SequelizeStorage, Umzug } from 'umzug';
 import { readdir } from 'node:fs/promises';
 import { join } from 'node:path';
 import { seedReference } from './seeders/reference';
 
-export const legacyMigrationNames = {
-  '001-initial': '20260923000000-initial',
-  '002-webhook-credentials': '20260923010000-webhook-credentials',
-  '003-single-tenant-intake': '20260924000000-single-tenant-intake',
-} as const;
+import { planMigrationHistory } from './migration-history';
 
 export async function migrate(db: Sequelize) {
   const directory = join(__dirname, 'migrations');
@@ -30,20 +26,19 @@ export async function migrate(db: Sequelize) {
   const connection = (await db.connectionManager.getConnection({ type: 'write' })) as any;
   try {
     await connection.query('SELECT pg_advisory_lock(783442001)');
-    const executed = new Set(await storage.executed());
-    // Rename only bookkeeping entries, never rerun DDL on an existing installation.
-    await db.transaction(async (transaction) => {
-      for (const [oldName, newName] of Object.entries(legacyMigrationNames)) {
-        if (!executed.has(oldName)) continue;
-        if (executed.has(newName)) throw new Error('Ambiguous migration history: ' + oldName);
-        await queryInterface.bulkUpdate(
-          storage.model.getTableName(),
-          { name: newName },
-          { name: oldName },
+    const history = planMigrationHistory(await storage.executed());
+    // Expand bundled history atomically, without executing its schema changes again.
+    if (history.remove.length) {
+      await db.transaction(async (transaction) => {
+        const table = storage.model.getTableName();
+        await queryInterface.bulkInsert(
+          table,
+          history.add.map((name) => ({ name })),
           { transaction },
         );
-      }
-    });
+        await queryInterface.bulkDelete(table, { name: { [Op.in]: history.remove } }, { transaction });
+      });
+    }
     await runner.up();
     await seedReference(db);
   } finally {

@@ -1,0 +1,51 @@
+import { QueryInterface, DataTypes as D, literal, fn, col } from 'sequelize';
+
+// Schema is defined here rather than imported from mutable application models.
+export async function up(queryInterface: QueryInterface) {
+  await queryInterface.sequelize.transaction(async (transaction) => {
+    const options = { transaction };
+    const id = () => ({ type: D.UUID, primaryKey: true, defaultValue: literal('gen_random_uuid()') });
+    const required = (type: any) => ({ type, allowNull: false });
+    const timestamps = () => ({
+      created_at: { ...required(D.DATE), defaultValue: literal('now()') },
+      updated_at: { ...required(D.DATE), defaultValue: literal('now()') },
+    });
+    const check = (table: string, name: string, fields: string[], expression: string) =>
+      queryInterface.addConstraint(table, {
+        fields,
+        name,
+        type: 'check',
+        where: literal(expression),
+        transaction,
+      });
+    const index = (table: string, name: string, fields: any[], extra = {}) =>
+      queryInterface.addIndex(table, fields, { name, ...extra, transaction });
+    await queryInterface.createTable(
+      'statuses',
+      {
+        id: id(),
+        name: required(D.STRING(60)),
+        color: required(D.STRING(7)),
+        position: required(D.INTEGER),
+        archived_at: D.DATE,
+        version: { ...required(D.INTEGER), defaultValue: 1 },
+        ...timestamps(),
+      },
+      options,
+    );
+    await check('statuses', 'statuses_name_check', ['name'], 'length(trim(name))>0');
+    await check('statuses', 'statuses_color_check', ['color'], "color ~ '^#[0-9a-fA-F]{6}$'");
+    await check('statuses', 'statuses_position_check', ['position'], 'position>=0');
+    await check('statuses', 'statuses_version_check', ['version'], 'version>0');
+    await index('statuses', 'statuses_active_name', [fn('lower', col('name'))], {
+      unique: true,
+      where: { archived_at: null },
+    });
+  });
+}
+
+export async function down(queryInterface: QueryInterface) {
+  await queryInterface.sequelize.transaction(async (transaction) => {
+    await queryInterface.dropTable('statuses', { transaction });
+  });
+}
