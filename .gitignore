@@ -21,3 +21,7 @@
 **/*.log
 .local/
 .DS_Store
+.agents/
+.github/
+AGENT.md
+AGENTS.md

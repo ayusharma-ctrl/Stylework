@@ -35,7 +35,7 @@ flowchart LR
 
 The singleton `app_settings` row stores the default status, timezone and catalog revision. It has a database `CHECK(id=1)` and no tenant ownership or workspace relationships. Migration 003 renames the earlier settings table without losing configuration.
 
-See [architecture decisions](docs/architecture.md), [AI collaboration record](AGENT.md), and [project skill/progress](.agents/skills/stylework-project/SKILL.md).
+See [architecture decisions](docs/architecture.md). Local AI guidance and progress files are intentionally excluded from Git.
 
 ## Setup instructions
 
@@ -181,7 +181,7 @@ npm run test:e2e
 
 Integration creates a unique disposable `stylework_test_*` database and reserves Redis DB 15. Defaults use local Compose dependencies; override `TEST_DATABASE_URL` (a PostgreSQL admin connection) and `TEST_REDIS_URL` as needed. Never point these tests at customer infrastructure. The full smoke requires the backend with RUN_WORKER=true; it creates and revokes a temporary database webhook key unless `WEBHOOK_KEY` is provided. It adds a synthetic lead and retains its audit trail.
 
-Local verification on 24 September 2026 passed: **22 backend unit tests, 25 real PostgreSQL/Redis integration scenarios, 7 frontend tests and 2 Playwright journeys**, plus independent production builds, complete Compose startup and the REST webhook-to-dashboard smoke journey. Superseded GraphQL tests were replaced by REST coverage. New regressions verify date boundaries, manual intake/authentication/quotas/audit, source isolation and compression negotiation. Chromium verifies manual creation and both same-day date filters with no GraphQL traffic. Frontend gzip responses decompress to the original asset. Desktop light/dark and mobile screenshots were inspected. Integration also verifies injected database rollback, duplicate acceptance/redelivery, ordering, session races, query limits, audit immutability, SSE revocation and recovery after Redis data loss. Crash boundaries are exercised through transaction fault injection and committed-job redelivery; exhaustive process-kill timing and multi-region chaos are future work. Hosted deployment and remote GitHub Actions execution have not been verified.
+Local verification on 24 September 2026 passed: **22 backend unit tests, 25 real PostgreSQL/Redis integration scenarios, 7 frontend tests and 2 Playwright journeys**, plus independent production builds, complete Compose startup and the REST webhook-to-dashboard smoke journey. Superseded GraphQL tests were replaced by REST coverage. New regressions verify date boundaries, manual intake/authentication/quotas/audit, source isolation and compression negotiation. Chromium verifies manual creation and both same-day date filters with no GraphQL traffic. Frontend gzip responses decompress to the original asset. Desktop light/dark and mobile screenshots were inspected. Integration also verifies injected database rollback, duplicate acceptance/redelivery, ordering, session races, query limits, audit immutability, SSE revocation and recovery after Redis data loss. Crash boundaries are exercised through transaction fault injection and committed-job redelivery; exhaustive process-kill timing and multi-region chaos are future work. Hosted deployment has not been verified. Automated GitHub Actions configuration was removed at the owner's request; run the commands above locally.
 
 The architecture aims to support millions of requests through bounded admission, durable asynchronous work, indexed reads and independent API/worker scaling. **This is an architectural target, not a certified throughput guarantee.** Per the revised user scope, demo data stays small and large datasets/load tests are excluded. An earlier local experiment did not meet the latency targets; it prompted quota and admission fixes, and its temporary database and large benchmark tooling were removed. No million-request capacity claim is made. Deployment-specific load validation requires separate authorization.
 
@@ -194,7 +194,7 @@ The architecture aims to support millions of requests through bounded admission,
 4. Run the credential creation CLI locally with the production database connection; Render Free does not provide a service shell. Supply the resulting key only to the sender. Do not seed demo leads automatically in production. Explicit demonstration seeding requires `ALLOW_DEMO_SEED=true`.
 5. Verify readiness, run a signed-in browser journey and send one keyed webhook through the backend processor. Record the public app/API URLs here after owner publication.
 
-**Upgrade note:** migration 003 renames the configuration table. Stop the old API/worker, migrate once, then start both with the new image. Do not run old and new versions together during this rename. Fresh Compose startup handles migrations automatically.
+**Upgrade note:** migration `20260924000000-single-tenant-intake` (formerly 003) renames the configuration table. Stop the old API/worker, migrate once, then start both with the new image. Do not run old and new versions together during this rename. Fresh Compose startup handles migrations automatically.
 
 The default runtime has one shared pool of **4 PostgreSQL connections** for API and jobs. Startup migrations use a separate pool of at most 4, closed before the API starts. Keep administrative headroom and budget for temporary old/new service overlap during deploys. Job concurrency is 1, outbox batches are 25, dispatch checks occur once/second and receipt reconciliation every 30 seconds. These small defaults reduce contention and idle polling on limited resources. Redis still needs several queue/PubSub connections, TLS, noeviction and provider-compatible connection quotas.
 
@@ -227,3 +227,22 @@ For a future paid deployment, separate and scale API/worker replicas using measu
 ## Future improvements
 
 Verified identity and hashed refresh sessions; verified roles; actual Meta subscription/Graph API enrichment; OpenTelemetry tracing and alert dashboards; process-kill chaos at every queue acknowledgement boundary; cross-instance/long-duration SSE and browser coverage; accessible table keyboard navigation across unloaded pages; production load/soak tests and recovery drills; retention/partition automation; managed backups and disaster-recovery SLOs.
+
+## Sequelize and migration conventions
+
+Use Sequelize models for ordinary reads, associations, filters, aggregates and counter increments. Managed Sequelize transactions keep lead, activity and counter changes atomic. Migration files follow the standard timestamped `YYYYMMDDHHmmss-description.ts` format with `up(queryInterface)` and `down(queryInterface)`; table/column/index operations use QueryInterface. The existing Umzug runner discovers them automatically in source and compiled builds. This follows [Sequelize migration conventions](https://sequelize.org/docs/v6/other-topics/migrations/).
+
+The migration runner translates the three former numeric history entries to timestamped names under its existing PostgreSQL advisory lock. It changes bookkeeping only: existing tables/data are not recreated. Fresh installations and partially migrated installations use the same runner. A rollback is destructive and is not invoked automatically; the down functions are tested only in disposable databases. The shared pg_trgm extension is deliberately retained on rollback.
+
+Raw SQL remains only where the ORM lacks an equivalent operation with the same correctness/query shape:
+
+- PostgreSQL advisory locks, generated search columns, immutable-audit triggers, and the expression index with its trigram operator class.
+- Tuple cursor comparisons, using allowlisted columns and Sequelize-escaped values, preserve one composite-index range scan and microsecond timestamps. Other pagination filters/projections use the ORM.
+- The capped webhook backlog count stops scanning at the admission threshold; an ordinary Model.count would scan every pending row.
+- The activity counter uses one atomic additive upsert; ordinary upsert replaces the value. Status/day/total counters use Sequelize bulkCreate plus increment inside the existing transaction.
+- A filtered metrics aggregate and the dashboard's two scalar index-top reads retain their PostgreSQL expressions.
+- The demo lead/audit CTE creates audits only for rows actually inserted, including concurrent reruns. The maintenance counter rebuild keeps INSERT...SELECT/UNION and table locks inside PostgreSQL instead of loading all records into Node. User/reference seed inserts use QueryInterface.
+
+All current server configuration fields and frontend environment variables have runtime callers. CLI-only variables (WEBHOOK_KEY, API_URL, SEED_COUNT, ALLOW_DEMO_SEED and test connection overrides) are intentional. No active settings were removed. The unused Radix dropdown package, old worker heartbeat-file writer and empty scripts placeholder were removed. Git ignores .agents/, .github/, .local/, AGENT.md and AGENTS.md; previously tracked local guidance is removed from the index, not from disk. Existing Git history is not rewritten.
+
+September 25 ORM cleanup verification: both production builds, 25 backend unit tests, 30 PostgreSQL/Redis integration tests, 7 frontend tests, backend Docker build and the full webhook-to-dashboard smoke passed. Migration tests cover fresh/repeat/reverse execution and full/partial legacy history. Pagination regression covers microsecond timestamps, ties, forward/backward navigation, every lead sort and literal search wildcard characters. The existing local migration upgrade preserved record counts and settings; no persisted database was reset.
